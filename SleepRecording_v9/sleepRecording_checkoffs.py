@@ -23,92 +23,92 @@ EEG and EMG, and the digital inputs for getting the camera strobe signals, laser
 This program has a lot of room for improvement, but because it's a bit messy, it has become increasingly inefficient to add features.
 """
 
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QTimer
-from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit
-import pyqtgraph as pg
-from run_GUI_v7 import Ui_MainWindow
-import sleepy
-import socket
-import numpy as np
-import scipy
-import PyCapture2
-import cv2
-import serial
-import serial.tools.list_ports as com_read
-import time
-import sys
-import shutil
-import os
-import glob
+# from PyQt5 import QtCore, QtGui, QtWidgets
+# from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QTimer
+# from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit
+# import pyqtgraph as pg
+# from run_GUI_v7 import Ui_MainWindow
+# import sleepy
+# import socket
+# import numpy as np
+# import scipy
+# import PyCapture2
+# import cv2
+# import serial
+# import serial.tools.list_ports as com_read
+# import time
+# import sys
+# import shutil
+# import os
+# import glob
 
-################### Functions used for the spectral analysis #######################
+# ################### Functions used for the spectral analysis #######################
 
-def power_spectrum(data, length, dt):
-    """
-    scipy's implementation of Welch's method using hanning window to estimate
-    the power spectrum
-    @Parameters
-        data    -   time series; float vector!
-        length  -   length of hanning window, even integer!
+# def power_spectrum(data, length, dt):
+#     """
+#     scipy's implementation of Welch's method using hanning window to estimate
+#     the power spectrum
+#     @Parameters
+#         data    -   time series; float vector!
+#         length  -   length of hanning window, even integer!
     
-    @Return:
-        powerspectrum, frequencies
-    """
-    f, pxx = scipy.signal.welch(data, fs=1/dt, window='hanning', nperseg=int(length), noverlap=int(length/2))
-    return pxx, f
+#     @Return:
+#         powerspectrum, frequencies
+#     """
+#     f, pxx = scipy.signal.welch(data, fs=1/dt, window='hanning', nperseg=int(length), noverlap=int(length/2))
+#     return pxx, f
 
 
-def smooth_data(x, sig):
-    """
-    y = smooth_data(x, sig)
-    smooth data vector @x with gaussian kernal
-    with standard deviation $sig
-    """
-    sig = float(sig)
-    if sig == 0.0:
-        return x
+# def smooth_data(x, sig):
+#     """
+#     y = smooth_data(x, sig)
+#     smooth data vector @x with gaussian kernal
+#     with standard deviation $sig
+#     """
+#     sig = float(sig)
+#     if sig == 0.0:
+#         return x
         
-    # gaussian:
-    gauss = lambda (x, sig) : (1/(sig*np.sqrt(2.*np.pi)))*np.exp(-(x*x)/(2.*sig*sig))
+#     # gaussian:
+#     gauss = lambda (x, sig) : (1/(sig*np.sqrt(2.*np.pi)))*np.exp(-(x*x)/(2.*sig*sig))
 
-    p = 1000000000
-    L = 10.
-    while (p > p):
-        L = L+10
-        p = gauss((L, sig))
+#     p = 1000000000
+#     L = 10.
+#     while (p > p):
+#         L = L+10
+#         p = gauss((L, sig))
 
-    F = map(lambda (x): gauss((x, sig)), np.arange(-L, L+1.))
-    F = F / np.sum(F)
+#     F = map(lambda (x): gauss((x, sig)), np.arange(-L, L+1.))
+#     F = F / np.sum(F)
     
-    return scipy.signal.fftconvolve(x, F, 'same')
+#     return scipy.signal.fftconvolve(x, F, 'same')
 
 
-def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
+# def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
 
-    len_eeg = len(EEG)
-    fdt = 2.5
-    SR = 1000.0
-    swin = int(np.round(SR)*5.0)
-    swinh = int(swin/2.0)
-    fft_win = int(swin/5.0)
-    spoints = int(np.floor(len_eeg/swinh))
+#     len_eeg = len(EEG)
+#     fdt = 2.5
+#     SR = 1000.0
+#     swin = int(np.round(SR)*5.0)
+#     swinh = int(swin/2.0)
+#     fft_win = int(swin/5.0)
+#     spoints = int(np.floor(len_eeg/swinh))
 
-    # SE = np.zeros((fft_win/2+1, spoints))
-    # SM = np.zeros((fft_win/2+1, spoints))
+#     # SE = np.zeros((fft_win/2+1, spoints))
+#     # SM = np.zeros((fft_win/2+1, spoints))
 
 
-    x_e = EEG[0:swin]
-    [p_e,f_e] = power_spectrum(x_e.astype('float'), fft_win, 1.0/SR)
-    p_e = smooth_data(p_e,sf)
-    # SE[:,i] = alpha*p + (1-alpha) * SE[:,i-1]
+#     x_e = EEG[0:swin]
+#     [p_e,f_e] = power_spectrum(x_e.astype('float'), fft_win, 1.0/SR)
+#     p_e = smooth_data(p_e,sf)
+#     # SE[:,i] = alpha*p + (1-alpha) * SE[:,i-1]
 
-    x_m = EMG[0:swin]
-    [p_m,f_m] = power_spectrum(x_m.astype('float'), fft_win, 1.0/SR)
-    p_m = smooth_data(p_m,sf)
-    # SM[:,i] = alpha*p + (1-alpha) * SM[:,i-1]
+#     x_m = EMG[0:swin]
+#     [p_m,f_m] = power_spectrum(x_m.astype('float'), fft_win, 1.0/SR)
+#     p_m = smooth_data(p_m,sf)
+#     # SM[:,i] = alpha*p + (1-alpha) * SM[:,i-1]
 
-    return p_e, p_m, f_e, f_m
+#     return p_e, p_m, f_e, f_m
 
 
 
@@ -442,16 +442,16 @@ class controlBoard(QtWidgets.QMainWindow):
 
     # Setting GUI properties (Presetting)
 
-        super(controlBoard, self).__init__()
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
-        self.setWindowIcon(QtGui.QIcon('sleepm.png'))
-        self.ui.pulseonbutton.setDisabled(True)
-        self.ui.pulseoffbutton.setDisabled(True)
-        self.ui.entercomment.setDisabled(True)
-        self.ui.t_rem.setAlignment(QtCore.Qt.AlignCenter)
-        self.ui.p_rem.setAlignment(QtCore.Qt.AlignCenter)
-        self.ui.pul_enable.setChecked(True)
+        # super(controlBoard, self).__init__()
+        # self.ui = Ui_MainWindow()
+        # self.ui.setupUi(self)
+        # self.setWindowIcon(QtGui.QIcon('sleepm.png'))
+        # self.ui.pulseonbutton.setDisabled(True)
+        # self.ui.pulseoffbutton.setDisabled(True)
+        # self.ui.entercomment.setDisabled(True)
+        # self.ui.t_rem.setAlignment(QtCore.Qt.AlignCenter)
+        # self.ui.p_rem.setAlignment(QtCore.Qt.AlignCenter)
+        # self.ui.pul_enable.setChecked(True)
         self.ardorrasp = ''
 
         # Setup REM detection stuff
@@ -462,21 +462,21 @@ class controlBoard(QtWidgets.QMainWindow):
 
         # Setting core attributes for the Main and QThreads to use as references
 
-        self.start_on = 0
-        self.preview_on = 0
-        self.cam_running = 0
-        self.cam_connected_LED = 0
-        self.ard_connected_LED = 0
-        self.timer_obj = TotTime_counter()
-        self.cam1on = 0
-        self.cam2on = 0
+        # self.start_on = 0
+        # self.preview_on = 0
+        # self.cam_running = 0
+        # self.cam_connected_LED = 0
+        # self.ard_connected_LED = 0
+        # self.timer_obj = TotTime_counter()
+        # self.cam1on = 0
+        # self.cam2on = 0
 
-        # Create error dialog handle to be used throughout the code
+        # # Create error dialog handle to be used throughout the code
 
-        self.error_dialog = QtWidgets.QMessageBox()
-        self.error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
-        self.error_dialog.setWindowTitle("Error")
-        self.error_dialog.setWindowIcon(QtGui.QIcon('sleepm.png'))
+        # self.error_dialog = QtWidgets.QMessageBox()
+        # self.error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
+        # self.error_dialog.setWindowTitle("Error")
+        # self.error_dialog.setWindowIcon(QtGui.QIcon('sleepm.png'))
 
         # Setup QT Signal and Slot Arrangement
 
@@ -1236,30 +1236,30 @@ class controlBoard(QtWidgets.QMainWindow):
         else:
             self.ui.cpulsedur.setDisabled(False)
 
-    @pyqtSlot()
-    def disablePulses(self):
-        if self.ui.pul_enable.checkState() != 2:
-            self.ui.pulsedur.setDisabled(True)
-            self.ui.minPG.setDisabled(True)
-            self.ui.maxPG.setDisabled(True)
-            self.ui.hi.setDisabled(True)
-            self.ui.lo.setDisabled(True)
-            self.ui.lid1.setDisabled(True)
-            self.ui.dialnum1.setDisabled(True)
-            self.ui.lid2.setDisabled(True)
-            self.ui.dialnum2.setDisabled(True)
-            self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "Disabled"))
-        else:
-            self.ui.pulsedur.setDisabled(False)
-            self.ui.minPG.setDisabled(False)
-            self.ui.maxPG.setDisabled(False)
-            self.ui.hi.setDisabled(False)
-            self.ui.lo.setDisabled(False)
-            self.ui.lid1.setDisabled(False)
-            self.ui.dialnum1.setDisabled(False)
-            self.ui.lid2.setDisabled(False)
-            self.ui.dialnum2.setDisabled(False)
-            self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", ''))
+    # @pyqtSlot()
+    # def disablePulses(self):
+    #     if self.ui.pul_enable.checkState() != 2:
+    #         self.ui.pulsedur.setDisabled(True)
+    #         self.ui.minPG.setDisabled(True)
+    #         self.ui.maxPG.setDisabled(True)
+    #         self.ui.hi.setDisabled(True)
+    #         self.ui.lo.setDisabled(True)
+    #         self.ui.lid1.setDisabled(True)
+    #         self.ui.dialnum1.setDisabled(True)
+    #         self.ui.lid2.setDisabled(True)
+    #         self.ui.dialnum2.setDisabled(True)
+    #         self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "Disabled"))
+    #     else:
+    #         self.ui.pulsedur.setDisabled(False)
+    #         self.ui.minPG.setDisabled(False)
+    #         self.ui.maxPG.setDisabled(False)
+    #         self.ui.hi.setDisabled(False)
+    #         self.ui.lo.setDisabled(False)
+    #         self.ui.lid1.setDisabled(False)
+    #         self.ui.dialnum1.setDisabled(False)
+    #         self.ui.lid2.setDisabled(False)
+    #         self.ui.dialnum2.setDisabled(False)
+    #         self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", ''))
 
     # @pyqtSlot()
     # def preview_clicked(self):
@@ -1326,14 +1326,14 @@ class controlBoard(QtWidgets.QMainWindow):
     #             self.camera_thread.quit()
     #             self.camera_thread.wait()
 
-    @pyqtSlot()
-    def submittxt(self):
-        self.f = open(self.todayis + "_notes.txt", 'a')
-        self.f.write("\r\n//")
-        self.f.write(time.asctime()[11:19] + " ")
-        self.f.write(self.ui.commentbox.toPlainText())
-        self.ui.commentbox.clear()
-        self.f.close()
+    # @pyqtSlot()
+    # def submittxt(self):
+    #     self.f = open(self.todayis + "_notes.txt", 'a')
+    #     self.f.write("\r\n//")
+    #     self.f.write(time.asctime()[11:19] + " ")
+    #     self.f.write(self.ui.commentbox.toPlainText())
+    #     self.ui.commentbox.clear()
+    #     self.f.close()
 
 
     # def pulseon_clicked(self):

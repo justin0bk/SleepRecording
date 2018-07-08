@@ -3,6 +3,8 @@
 # Form implementation generated from reading ui file 'run_GUI_v9.ui'
 #
 # Created by: PyQt5 UI code generator 5.6
+# notes:
+#  - replace the QTextEdit to QPlainTextEdit on the GUI
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -353,7 +355,7 @@ class Ui_MainWindow(object):
         font.setWeight(75)
         self.label_box2cam.setFont(font)
         self.label_box2cam.setObjectName("label_box2cam")
-        self.commentbox = QtWidgets.QTextEdit(self.genTab)
+        self.commentbox = QtWidgets.QPlainTextEdit(self.genTab)
         self.commentbox.setGeometry(QtCore.QRect(640, 600, 261, 46))
         font = QtGui.QFont()
         font.setPointSize(10)
@@ -613,7 +615,7 @@ class Ui_MainWindow(object):
         self.c_off.setObjectName("c_off")
         self.gridLayout_6.addWidget(self.c_off, 2, 0, 1, 1)
         self.layout_pulseControl.addLayout(self.gridLayout_6)
-        self.commentHist = QtWidgets.QTextEdit(self.genTab)
+        self.commentHist = QtWidgets.QPlainTextEdit(self.genTab)
         self.commentHist.setGeometry(QtCore.QRect(640, 500, 261, 96))
         font = QtGui.QFont()
         font.setPointSize(10)
@@ -1388,11 +1390,7 @@ class Ui_MainWindow(object):
         self.label_box2.setText(_translate("MainWindow", "Box2"))
         self.label_box1cam.setText(_translate("MainWindow", "Box 1 Cam"))
         self.label_box2cam.setText(_translate("MainWindow", "Box 2 Cam"))
-        self.commentbox.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:10pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><br /></p></body></html>"))
+        self.commentbox.setPlaceholderText(_translate("MainWindow", "Enter Comments Here"))
         self.label_comments.setText(_translate("MainWindow", "Comments"))
         self.entercomment.setText(_translate("MainWindow", "Submit"))
         self.label_options.setText(_translate("MainWindow", "Protocol"))
@@ -1417,11 +1415,7 @@ class Ui_MainWindow(object):
         self.continuous.setText(_translate("MainWindow", "Continuous?"))
         self.c_on.setText(_translate("MainWindow", "On"))
         self.c_off.setText(_translate("MainWindow", "Off"))
-        self.commentHist.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:10pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Comment history:</p></body></html>"))
+        self.commentHist.appendPlainText(_translate("MainWindow", "Comment history:"))
         self.label_timeRemaining.setText(_translate("MainWindow", "Time Remaining:"))
         self.label_nextPulse.setText(_translate("MainWindow", "Next Pulse:"))
         self.tabs.setTabText(self.tabs.indexOf(self.genTab), _translate("MainWindow", "General"))

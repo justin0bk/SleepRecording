@@ -122,9 +122,23 @@ class main(QtWidgets.QMainWindow):
         self.ui.setupUi(self)
         self.setWindowIcon(QtGui.QIcon('sleepm.png'))
 
-        ### GUI placeholder variables
+        #### GUI placeholder variables
         self.cam1 = None
         self.cam2 = None
+
+        #### Flir Camera settings
+        self.bus = PyCapture2.BusManager()
+        # Video Modes
+        self.vidMOD = 0x604
+        self.MODE_0 = 0x00000000 #Full resolution
+        self.MODE_1 = 0x20000000 #Half resolution
+        self.MODE_5 = 0xA0000000 #Quarter resolution
+        # Switching on Strobe Mode
+        self.GPIO_pin2_setting = 0x1130
+        self.GPIO_pin2_outVal = 0x80080001
+        self.pin2_strobecnt = 0x1508
+        self.StrobeOff = 0x80000000
+        self.StrobeOn = 0x82000000
 
         #### GUI status variables
         self.rpi_on = False
@@ -193,20 +207,6 @@ class main(QtWidgets.QMainWindow):
         self.devices['led_cam1'] = self.ui.led_cam1
         self.devices['led_cam2'] = self.ui.led_cam2
 
-        # Setting Video Mode
-        self.vidMOD = 0x604
-        self.MODE_0 = 0x00000000 #Full resolution
-        self.MODE_1 = 0x20000000 #Half resolution
-        self.MODE_5 = 0xA0000000 #Quarter resolution
-
-         # Switching on Strobe Mode
-        self.GPIO_pin2_setting = 0x1130
-        self.GPIO_pin2_outVal = 0x80080001
-        self.pin2_strobecnt = 0x1508
-
-        self.StrobeOff = 0x80000000
-        self.StrobeOn = 0x82000000
-
         ## Control ##
         self.controls = {}
         self.controls['preview'] = self.ui.preview
@@ -272,7 +272,7 @@ class main(QtWidgets.QMainWindow):
         self.thresholds['threshMu4'] = self.ui.threshMu4
 
 
-        ## Error Dialog Handling ##
+        #### Error Dialog Handle ####
         self.error_dialog = QMessageBox()
         self.error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
         self.error_dialog.setWindowTitle("Error")
@@ -280,17 +280,12 @@ class main(QtWidgets.QMainWindow):
 
 
         #### Connecting Signals and Slots ####
-        self.protocols['option_default'].clicked.connect(self.default_setup)
-        self.protocols['option_ol'].clicked.connect(self.ol_setup)
-        self.protocols['option_cl'].clicked.connect(self.cl_setup)
-        self.protocols['option_remdep'].clicked.connect(self.remdep_setup)
-        self.protocols['option_nremdep'].clicked.connect(self.nremdep_setup)
-
+        for protocol in self.protocols:
+            self.protocols[protocol].clicked.connect(self.protocol_setup)
         self.devices['connect_controller'].clicked.connect(self.comm_connect)
-        self.bus = PyCapture2.BusManager()
+        
         self.devices['connect_c1'].clicked.connect(self.cam1_setup)
         self.devices['connect_c2'].clicked.connect(self.cam2_setup)
-
         self.controls['preview'].clicked.connect(self.preview_clicked)
         # self.controls['startbutton'].clicked.connect(self.start_clicked)
         # self.controls['stopbutton'].clicked.connect(self.stop_clicked)
@@ -304,43 +299,39 @@ class main(QtWidgets.QMainWindow):
         self.disable_comment()
         self.default_setup()
 
+    @pyqtSlot()
+    def protocol_setup(self):
+        if self.protocols['option_default'].isChecked():
+            # Disable settings used for other protocols
+            self.parameters['maxPG'].setDisabled(True)
+            self.parameters['minPG'].setDisabled(True)
+            for item in self.thresholds:
+                self.thresholds[item].setDisabled(True)
+
+        elif self.protocols['option_ol'].isChecked():
+            self.parameters['maxPG'].setDisabled(False)
+            self.parameters['minPG'].setDisabled(False)
+            for item in self.thresholds:
+                self.thresholds[item].setDisabled(True)
+
+        else:
+            self.parameters['maxPG'].setDisabled(True)
+            self.parameters['minPG'].setDisabled(True)
+            for item in self.thresholds:
+                self.thresholds[item].setDisabled(False)
+
+
 
     @pyqtSlot()
-    def default_setup(self):
-        # Disable settings used for other protocols
-        self.parameters['maxPG'].setDisabled(True)
-        self.parameters['minPG'].setDisabled(True)
-        for item in self.thresholds:
-            self.thresholds[item].setDisabled(True)
-
-
+    def run_default(self):
+        
     @pyqtSlot()
-    def ol_setup(self):
-        self.parameters['maxPG'].setDisabled(False)
-        self.parameters['minPG'].setDisabled(False)
-        for item in self.thresholds:
-            self.thresholds[item].setDisabled(True)
-
+    def run_ol(self):
+        
     @pyqtSlot()
-    def cl_setup(self):
-        self.parameters['maxPG'].setDisabled(True)
-        self.parameters['minPG'].setDisabled(True)
-        for item in self.thresholds:
-            self.thresholds[item].setDisabled(False)
+    def run_cl(self):
+        
 
-    @pyqtSlot()
-    def remdep_setup(self):
-        self.parameters['maxPG'].setDisabled(True)
-        self.parameters['minPG'].setDisabled(True)
-        for item in self.thresholds:
-            self.thresholds[item].setDisabled(False)
-
-    @pyqtSlot()
-    def nremdep_setup(self):
-        self.parameters['maxPG'].setDisabled(True)
-        self.parameters['minPG'].setDisabled(True)
-        for item in self.thresholds:
-            self.thresholds[item].setDisabled(False)
 
     # def arduino_mode(self):
 
@@ -370,9 +361,10 @@ class main(QtWidgets.QMainWindow):
     def cam1_setup(self):
         if not self.cam1_connected:
             self.cam1 = PyCapture2.Camera()
-            self.cam_connect(0, self.cam1)
-            self.devices['led_cam1'].setPixmap(QtGui.QPixmap("led_on"))
-            self.cam1_connected = True
+            connection = self.cam_connect(0, self.cam1)
+            if connection == 'success':
+                self.devices['led_cam1'].setPixmap(QtGui.QPixmap("led_on"))
+                self.cam1_connected = True
         else:
             try:
                 self.cam1.disconnect()
@@ -386,9 +378,10 @@ class main(QtWidgets.QMainWindow):
     def cam2_setup(self):
         if not self.cam2_connected:
             self.cam2 = PyCapture2.Camera()
-            self.cam_connect(1, self.cam2)
-            self.devices['led_cam2'].setPixmap(QtGui.QPixmap("led_on"))
-            self.cam2_connected = True
+            connection = self.cam_connect(1, self.cam2)
+            if connection == 'success':
+                self.devices['led_cam2'].setPixmap(QtGui.QPixmap("led_on"))
+                self.cam2_connected = True
         else:
             try:
                 self.cam2.disconnect()
@@ -436,6 +429,8 @@ class main(QtWidgets.QMainWindow):
             cam.writeRegister(self.pin2_strobecnt, self.StrobeOff)
 
             QTimer.singleShot(1200, temp_enablebtns)
+
+            return 'success'
 
         except PyCapture2.Fc2error:
             self.error_dialog.setText("There is a problem connecting to the Camera. Try reconnecting the USB in the right order.")
@@ -524,8 +519,30 @@ class main(QtWidgets.QMainWindow):
     # @pyqtSlot()
     # def puloff_clicked(self):
 
-    # @pyqtSlot()
-    # def submit_comment(self):
+    @pyqtSlot()
+    def submit_comment(self):
+        self.f = open(self.todayis + "_notes.txt", 'a')
+        self.f.write("\r\n//")
+        self.f.write(time.asctime()[11:19] + " ")
+        self.f.write(self.commentItems['commentbox'].toPlainText())
+        self.commentItems['commentbox'].clear()
+        self.f.close()
+
+    @pyqtSlot()
+    def submit_comment(self):
+        # Writing comment to the txt file
+        self.f = open(self.todayis + "_notes.txt", 'a')
+        self.f.write("\r\n//")
+        self.f.write(time.asctime()[11:19] + " ")
+        self.f.write(self.commentItems['commentbox'].toPlainText())
+        self.f.close()
+
+        # Writing comment to the history
+        current_txt = self.commentItems['commentHist'].toPlainText()
+        new_txt = self.commentItems['commentbox'].toPlainText()
+        self.commentItems['commentHist'].appendPlainText("\r\n" + time.asctime()[11:19] + " " + new_txt)
+        self.commentItems['commentbox'].clear()
+
 
     def closeEvent(self, *args, **kwargs):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
