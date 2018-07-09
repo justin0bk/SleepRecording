@@ -210,7 +210,6 @@ class main(QtWidgets.QMainWindow):
         self.define_variables()
         self.connect_signals()
 
-
         #### Start from default setup ####
         self.disable_comment()
         self.protocol_setup()
@@ -380,11 +379,11 @@ class main(QtWidgets.QMainWindow):
         self.devices['connect_c1'].clicked.connect(self.cam1_setup)
         self.devices['connect_c2'].clicked.connect(self.cam2_setup)
         self.controls['preview'].clicked.connect(self.preview_clicked)
-        # self.controls['startbutton'].clicked.connect(self.start_clicked)
-        # self.controls['stopbutton'].clicked.connect(self.stop_clicked)
+        self.controls['startbutton'].clicked.connect(self.start_clicked)
+        self.controls['stopbutton'].clicked.connect(self.stop_clicked)
         # self.pulseControls['c_on'].clicked.connect(self.pulon_clicked)
         # self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
-        # self.commentItems['entercomment'].clicked.connect(self.submit_comment)
+        self.commentItems['entercomment'].clicked.connect(self.submit_comment)
 
     @pyqtSlot()
     def protocol_setup(self):
@@ -445,7 +444,6 @@ class main(QtWidgets.QMainWindow):
             self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_off"))
             self.ard_on = False
 
-
     # def raspi_mode_on(self, ip):
 
     # def raspi_disconnect(self):
@@ -501,16 +499,6 @@ class main(QtWidgets.QMainWindow):
                 print("There was a problem disconnecting the camera 2")
                 pass
 
-    
-    def cams_disconnect(self):
-        try:
-            self.cam1.disconnect()
-            self.cam2.disconnect()
-            self.cam1_connected = False
-            self.cam2_connected = False
-        except AttributeError:
-            pass
-
     def cam_connect(self, cam_num, cam):
 
         def temp_enablebtns():
@@ -546,8 +534,16 @@ class main(QtWidgets.QMainWindow):
             self.error_dialog.setText("There is a problem connecting to the Camera. Try reconnecting the USB in the right order.")
             self.error_dialog.show()
 
-    def start_cameraThread(self, cam, record_or_preview, cam_num):
+    def cams_disconnect(self):
+        try:
+            self.cam1.disconnect()
+            self.cam2.disconnect()
+            self.cam1_connected = False
+            self.cam2_connected = False
+        except AttributeError:
+            pass
 
+    def start_cameraThread(self, cam, record_or_preview, cam_num):
         camera_thread = QThread(self)
         camera_obj = worker_camera(record_or_preview, cam, cam_num)
         camera_obj.moveToThread(camera_thread)
@@ -560,13 +556,11 @@ class main(QtWidgets.QMainWindow):
         return camera_obj, camera_thread
 
     def stop_cameraThread(self, cam, cam_obj, cam_thread):
-
         cam_obj.camera_on = False
         cam.stopCapture()
         cam.writeRegister(self.pin2_strobecnt, self.StrobeOff)
         cam_thread.quit()
         cam_thread.wait()
-
 
     @pyqtSlot(str, np.ndarray, int)
     def process_vid(self, PoR, frame, cam_num):
@@ -599,7 +593,7 @@ class main(QtWidgets.QMainWindow):
 
 
         elif not self.start_on and self.preview_on:
-            self.controls['preview'].setStyleSheet(self.ui.stopbutton.styleSheet())
+            self.controls['preview'].setStyleSheet(self.controls['stopbutton'].styleSheet())
             self.preview_on = False
 
             for buttons in self.devices:
@@ -615,21 +609,196 @@ class main(QtWidgets.QMainWindow):
                 self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
                 QTimer.singleShot(100, lambda: self.cam2view.clear())
 
+    def create_mouselist(self):
+        mouselist = []
+        if self.mouseIDs['m1chk'].checkState() == 2:
+            mouselist.append(self.mouseIDs['id1'].text())
+        if self.mouseIDs['m2chk'].checkState() == 2:
+            mouselist.append(self.mouseIDs['id2'].text())
+        if self.mouseIDs['m3chk'].checkState() == 2:
+            mouselist.append(self.mouseIDs['id3'].text())
+        if self.mouseIDs['m4chk'].checkState() == 2:
+            mouselist.append(self.mouseIDs['id4'].text())
+        return mouselist, not bool(mouselist)
+
+    def input_disable(self, disable):
+        if disable:
+            for param in self.parameters:
+                self.parameters[param].setDisabled(disable)
+            for prop in self.mouseIDs:
+                self.mouseIDs[prop].setDisabled(disable)
+        else:
+            for param in self.parameters:
+                self.parameters[param].setDisabled(disable)
+            for prop in self.mouseIDs:
+                self.mouseIDs[prop].setDisabled(disable)
+            self.protocol_setup()
+
+    def getTime(self):
+
+        # Create prefix for all files using time library. date_time = "YearMonthDate_HrMinSec", date = "YearMonthDate"
+
+        date_time = str(time.localtime().tm_year)[2:4]
+        date = ''
+        
+
+        if len(str(time.localtime().tm_mon)) < 2:
+            date_time += '0' + str(time.localtime().tm_mon)
+            date += '0' + str(time.localtime().tm_mon) + '/'
+        else:
+            date_time += str(time.localtime().tm_mon)
+            date += str(time.localtime().tm_mon) + '/'
+
+        if len(str(time.localtime().tm_mday)) < 2:
+            date_time += '0' + str(time.localtime().tm_mday)
+            date += '0' + str(time.localtime().tm_mday) + '/'
+        else:
+            date_time += str(time.localtime().tm_mday)
+            date += str(time.localtime().tm_mday) + '/'
+
+        date += str(time.localtime().tm_year)[2:4]
+
+        date_time += str('_')
+        if len(str(time.localtime().tm_hour)) < 2:
+            date_time += '0' + str(time.localtime().tm_hour)
+        else:
+            date_time += str(time.localtime().tm_hour)
+
+        if len(str(time.localtime().tm_min)) < 2:
+            date_time += '0' + str(time.localtime().tm_min)
+        else:
+            date_time += str(time.localtime().tm_min)
+        if len(str(time.localtime().tm_sec)) < 2:
+            date_time += '0' + str(time.localtime().tm_sec)
+        else:
+            date_time += str(time.localtime().tm_sec)
+
+        time_init = time.localtime()
+        curr_time = str(time_init.tm_hour) + ':' + str(time_init.tm_min) + ':' + str(time_init.tm_sec)
+
+        return curr_time, date, date_time
+
+    def setupNotes(self):
+
+        self.timetxt, self.todate, self.todate_full = self.getTime()
+
+        # Writes a txt file to include all experiment setting and variables
+
+        self.txt = open(self.todate_full + "_notes.txt","w+")
+        self.txt.write('date:\t' + self.todate + '\r\n')
+        self.txt.write('time:\t' + self.timetxt + '\r\n')
+        self.txt.write('amplifier:\t' + 'intan' + '\r\n')
+        self.txt.write('SR:\t' + str(self.parameters['sr'].value()) + '\r\n')
+        self.txt.write('delay:\t' + str(self.parameters['delay'].value()) + '\r\n')
+        if self.protocols['option_ol'].isChecked():
+            self.txt.write('mode:\t' + 'ol\r\n')
+        elif self.protocols['option_cl'].isChecked():
+            self.txt.write('mode:\t' + 'cl\r\n')
+        elif self.protocols['option_remdep'].isChecked():
+            self.txt.write('mode:\t' + 'remdep\r\n')
+        elif self.protocols['option_nremdep'].isChecked():
+            self.txt.write('mode:\t' + 'nremdep\r\n')
+        else:
+            self.txt.write('mode:\t' + 'default\r\n')
+
+        if self.protocols['option_ol'].isChecked() or self.protocols['option_cl'].isChecked():
+            self.txt.write('laser_hi:\t' + str(self.parameters['hi'].value()) + '\r\n')
+            self.txt.write('laser_lo:\t' + str(self.parameters['lo'].value()) + '\r\n')
+            self.txt.write('stim_freq:\t' + str(int(1.0/(self.parameters['hi'].value()+self.parameters['lo'].value())/0.001)) + '\r\n')
+            if self.protocols['option_ol'].isChecked():
+                self.txt.write('laser_dur:\t' + str(self.parameters['pulsedur'].value()) + '\r\n')
+        self.txt.write('exp_dur:\t' + str(self.parameters['expdur'].value()) + '\r\n')
+        self.txt.write('mouse_ID:\t')
+        if self.mouseIDs['m1chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['id1'].text() + '\t')
+        else:
+            self.txt.write('\t ')
+        if self.mouseIDs['m2chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['id2'].text() + '\t')
+        else:
+            self.txt.write('\t ')
+        if self.mouseIDs['m3chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['id3'].text() + '\t')
+        else:
+            self.txt.write('\t ')
+        if self.mouseIDs['m4chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['id4'].text() + '\t')
+        else:
+            self.txt.write('\t ')
+
+        self.txt.write('\r\n')
+        self.txt.write('ch_alloc:\t')
+        if self.mouseIDs['m1chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['ch1'].text() + '\t')
+        if self.mouseIDs['m2chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['ch2'].text() + '\t')
+        if self.mouseIDs['m3chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['ch3'].text() + '\t')
+        if self.mouseIDs['m4chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['ch4'].text() + '\t')
+        
+        self.txt.write('\r\n')
+        self.txt.write('laser_used:\t')
+        if self.mouseIDs['m1chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['l1'].text() + '\t')
+        if self.mouseIDs['m2chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['l2'].text() + '\t')
+        if self.mouseIDs['m3chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['l3'].text() + '\t')
+        if self.mouseIDs['m4chk'].checkState() == 2:
+            self.txt.write(self.mouseIDs['l4'].text() + '\t')
+
+        self.txt.write('\r\n')
+        self.txt.write('#Notes:\t')
+        self.txt.close()
+
+    @pyqtSlot()
+    def start_clicked(self):
+        if self.ard_on or self.rpi_on:
+            self.mouselist, empty = self.create_mouselist()
+            
+            if empty:
+                self.error_dialog.setText("There are no mice selected")
+                self.error_dialog.show() 
+                return
+
+            if not self.start_on and not self.preview_on:
+                self.start_on = True
+                self.input_disable(True)
+                self.setupNotes()
+                self.enable_comment()
+
+                # add start time information using getTime function 
+
+                # Finish arduino commans and rpi commands
+
+                # if self.ard_on:
+                #     self.controls['startbutton'].setStyleSheet("background-color: red")
+                #     self.comPort.write(bytearray(b'H' + str(self.parameters['hi'].value()) + '\n'))
+                #     self.comPort.write(bytearray(b'L' + str(self.parameters['lo'].value()) + '\n'))
+                #     self.comPort.write(bytearray(b'D' + str(self.parameters['pulsedur'].value()) + '\n'))
 
 
-    # @pyqtSlot()
-    # def start_clicked(self):
+                # elif self.rpi_on:
+
+                self.controls['startbutton'].setStyleSheet("background-color: red")
+
+        else:
+            self.error_dialog.setText("You must connect the controller first!")
+            self.error_dialog.show()
 
 
+    @pyqtSlot()
+    def stop_clicked(self):
+        self.start_on = False
+        self.input_disable(False)
+        self.disable_comment()
+        self.commentItems['commentHist'].clear()
+        self.commentItems['commentHist'].appendPlainText("Comment history:")
+        
+        self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
 
-    # @pyqtSlot()
-    # def stop_clicked(self):
 
-    def enable_comment(self):
-        self.commentItems['entercomment'].setDisabled(False)
-
-    def disable_comment(self):
-        self.commentItems['entercomment'].setDisabled(True)
 
     # @pyqtSlot()
     # def pulon_clicked(self):
@@ -637,14 +806,20 @@ class main(QtWidgets.QMainWindow):
     # @pyqtSlot()
     # def puloff_clicked(self):
 
+    def enable_comment(self):
+        self.commentItems['entercomment'].setDisabled(False)
+
+    def disable_comment(self):
+        self.commentItems['entercomment'].setDisabled(True)
+
     @pyqtSlot()
     def submit_comment(self):
         # Writing comment to the txt file
-        self.f = open(self.todayis + "_notes.txt", 'a')
-        self.f.write("\r\n//")
-        self.f.write(time.asctime()[11:19] + " ")
-        self.f.write(self.commentItems['commentbox'].toPlainText())
-        self.f.close()
+        self.txt = open(self.todate_full + "_notes.txt", 'a')
+        self.txt.write("\r\n//")
+        self.txt.write(time.asctime()[11:19] + " ")
+        self.txt.write(self.commentItems['commentbox'].toPlainText())
+        self.txt.close()
 
         # Writing comment to the history
         current_txt = self.commentItems['commentHist'].toPlainText()
