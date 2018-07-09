@@ -56,7 +56,6 @@ def power_spectrum(data, length, dt):
     f, pxx = scipy.signal.welch(data, fs=1/dt, window='hanning', nperseg=int(length), noverlap=int(length/2))
     return pxx, f
 
-
 def smooth_data(x, sig):
     """
     y = smooth_data(x, sig)
@@ -80,7 +79,6 @@ def smooth_data(x, sig):
     F = F / np.sum(F)
     
     return scipy.signal.fftconvolve(x, F, 'same')
-
 
 def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
 
@@ -108,6 +106,94 @@ def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
 
     return p_e, p_m, f_e, f_m
 
+
+
+
+
+######## Main QThread objects ########
+
+class worker_camera(QObject):
+    """
+    QThread object that runs the camera. Its signals display camera frames on the GUI and it also writes
+    video frames to an MKV stack.
+
+    One recently aadded feature is the self.f and self.f2 that writes timestamps for the video frames in 
+    a txt file.
+
+    Because of the way PyCapture2 package generates the image buffers (into a long list of pixel values), there is a bunch of numpy flipping
+    and transposing to get the image shape write to display it properly. I am guessing this is where the
+    inefficiency is coming from as each line requires new memory.
+
+    Also, there are two cameras in the same QObject that run at the same time. There should really be one object for
+    each camera. The logic behind defining this class as such was that I tried doing so, but failed to create two
+    individual video files. This was probably because I didn't use the right fourcc (some of the writer codecs can only be used one at a time. For example, XVID and H264.
+    The only ones that worked were for writing from two cameras were MJPG and DIVX). It should work now with using the write codec, but needs to be revised.
+    """
+
+    signal_camFrame = pyqtSignal(str, np.ndarray, int)
+    signal_timeStamp = pyqtSignal(str)
+
+    def __init__(self, preview_or_record, cam, cam_num):
+        super(worker_camera, self).__init__()
+        self.preview_or_record = preview_or_record
+        self.cam = cam
+        self.cam_num = cam_num
+        self.camera_on = False
+        self.writer = 0
+        self.prev_timestamp = 0
+        
+
+    @pyqtSlot()
+    def run_camera(self):
+        """
+        Commented areas for start_clicked
+        """
+
+        if self.preview_or_record == 'R':
+            # self.f = open("cam1_timestamps.txt","w+")
+            self.cam.writeRegister(0x1508, 0x82000000) #Turns strobe on
+
+        elif self.preview_or_record == 'P':
+            self.cam.writeRegister(0x1508, 0x80000000) #Turns strobe off
+
+        while self.camera_on:
+            try:
+                image = self.cam.retrieveBuffer()
+            except PyCapture2.Fc2error as fc2Err:
+                print "Error retrieving buffer : ", fc2Err
+                continue
+
+            self.img_timestamp = image.getTimeStamp()
+            # if self.preview_or_record == 'R':
+            #     if len(str(self.img_timestamp.microSeconds)) == 6:
+            #         self.f.write(str(self.img_timestamp.seconds)[-6:] + '.' + str(self.img_timestamp.microSeconds) + '\r\n')
+            #     else:
+            #         self.f.write(str(self.img_timestamp.seconds)[-6:] + '.0' + str(self.img_timestamp.microSeconds) + '\r\n')
+
+            imgdat = image.getData()
+            imgnp = np.transpose(np.array(imgdat).reshape(image.getRows(),image.getCols()))
+            self.prev_timestamp = self.img_timestamp
+            # t1 = 1
+            # else:
+                # t1 = 0
+
+
+            # if self.preview_or_record == 'R':
+            #     if t1 == 1:
+            #         self.writer.write(np.uint8(imgnp))
+            #     if self._cam2 != 0:
+            #         if t2 == 1:
+            #             self.writer2.write(np.uint8(imgnp2))
+            # if t1 == 1:
+
+            self.signal_camFrame.emit(self.preview_or_record, imgnp, self.cam_num)
+            
+            time.sleep(0.05)
+
+          
+
+
+
 ######## Core GUI class ########
 
 class main(QtWidgets.QMainWindow):
@@ -121,7 +207,15 @@ class main(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setWindowIcon(QtGui.QIcon('sleepm.png'))
+        self.define_variables()
+        self.connect_signals()
 
+
+        #### Start from default setup ####
+        self.disable_comment()
+        self.protocol_setup()
+
+    def define_variables(self):
         #### GUI placeholder variables
         self.cam1 = None
         self.cam2 = None
@@ -278,26 +372,19 @@ class main(QtWidgets.QMainWindow):
         self.error_dialog.setWindowTitle("Error")
         self.error_dialog.setWindowIcon(QtGui.QIcon('sleepm.png'))
 
-
+    def connect_signals(self):
         #### Connecting Signals and Slots ####
         for protocol in self.protocols:
             self.protocols[protocol].clicked.connect(self.protocol_setup)
         self.devices['connect_controller'].clicked.connect(self.comm_connect)
-        
         self.devices['connect_c1'].clicked.connect(self.cam1_setup)
         self.devices['connect_c2'].clicked.connect(self.cam2_setup)
         self.controls['preview'].clicked.connect(self.preview_clicked)
         # self.controls['startbutton'].clicked.connect(self.start_clicked)
         # self.controls['stopbutton'].clicked.connect(self.stop_clicked)
-
         # self.pulseControls['c_on'].clicked.connect(self.pulon_clicked)
         # self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
-
         # self.commentItems['entercomment'].clicked.connect(self.submit_comment)
-
-        #### Start from default setup ####
-        self.disable_comment()
-        self.default_setup()
 
     @pyqtSlot()
     def protocol_setup(self):
@@ -320,16 +407,14 @@ class main(QtWidgets.QMainWindow):
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(False)
 
-
-
-    @pyqtSlot()
-    def run_default(self):
+    # @pyqtSlot()
+    # def run_default(self):
         
-    @pyqtSlot()
-    def run_ol(self):
+    # @pyqtSlot()
+    # def run_ol(self):
         
-    @pyqtSlot()
-    def run_cl(self):
+    # @pyqtSlot()
+    # def run_cl(self):
         
 
 
@@ -436,7 +521,34 @@ class main(QtWidgets.QMainWindow):
             self.error_dialog.setText("There is a problem connecting to the Camera. Try reconnecting the USB in the right order.")
             self.error_dialog.show()
 
+    def start_cameraThread(self, cam, record_or_preview, cam_num):
 
+        camera_thread = QThread(self)
+        camera_obj = worker_camera(record_or_preview, cam, cam_num)
+        camera_obj.moveToThread(camera_thread)
+        camera_obj.camera_on = True
+        camera_obj.signal_camFrame.connect(self.process_vid)
+        camera_thread.started.connect(camera_obj.run_camera)
+        cam.startCapture()
+        camera_thread.start()
+
+        return camera_obj, camera_thread
+
+    def stop_cameraThread(self, cam, cam_obj, cam_thread):
+
+        cam_obj.camera_on = False
+        cam.stopCapture()
+        cam.writeRegister(self.pin2_strobecnt, self.StrobeOff)
+        cam_thread.quit()
+        cam_thread.wait()
+
+
+    @pyqtSlot(str, np.ndarray, int)
+    def process_vid(self, PoR, frame, cam_num):
+        if cam_num == 1:
+            self.cam1view.setImage(frame)
+        if cam_num == 2:
+            self.cam2view.setImage(frame)
 
     @pyqtSlot()
     def preview_clicked(self):
@@ -454,26 +566,11 @@ class main(QtWidgets.QMainWindow):
                 if 'preview' not in buttons:
                     self.controls[buttons].setDisabled(True)
 
-            # if self.cam2on != 1:
-            #     self.camera_thread = QThread(self)
-            #     self.camera_obj = worker_camera('P', self.c)
-            #     self.camera_obj.moveToThread(self.camera_thread)
-            #     self.camera_obj.camera_on = 1
-            #     self.camera_obj.signal_camFrame.connect(self.process_vid)
-            #     self.camera_thread.started.connect(self.camera_obj.run_camera)
-            #     self.c.startCapture()
-            #     self.camera_thread.start()
+            if self.cam1_connected:
+                self.cam_obj1, self.cam_thread1 = self.start_cameraThread(self.cam1, 'P', 1)
 
-            # else:
-            #     self.camera_thread = QThread(self)
-            #     self.camera_obj = worker_camera('P', self.c, self.c2)
-            #     self.camera_obj.moveToThread(self.camera_thread)
-            #     self.camera_obj.camera_on = 1
-            #     self.camera_obj.signal_camFrame.connect(self.process_vid)
-            #     self.camera_thread.started.connect(self.camera_obj.run_camera)
-            #     self.c.startCapture()
-            #     self.c2.startCapture()
-            #     self.camera_thread.start()
+            if self.cam2_connected:
+                self.cam_obj2, self.cam_thread2 = self.start_cameraThread(self.cam2, 'P', 2)
 
 
         elif not self.start_on and self.preview_on:
@@ -485,21 +582,15 @@ class main(QtWidgets.QMainWindow):
             for buttons in self.controls:
                 self.controls[buttons].setDisabled(False)
 
-            # if self.cam2on != 1:
-            #     self.camera_obj.camera_on = 0
-            #     self.c.stopCapture()
-            #     self.c.writeRegister(self.pin2_strobecnt, self.StrobeOff)
-            #     self.camera_thread.quit()
-            #     self.camera_thread.wait()
+            if self.cam1_connected:
+                self.stop_cameraThread(self.cam1, self.cam_obj1, self.cam_thread1)
+                self.cam1view.clear()
 
-            # else:
-            #     self.camera_obj.camera_on = 0
-            #     self.c.stopCapture()
-            #     self.c2.stopCapture()
-            #     self.c.writeRegister(self.pin2_strobecnt, self.StrobeOff)
-            #     self.c2.writeRegister(self.pin2_strobecnt, self.StrobeOff)
-            #     self.camera_thread.quit()
-            #     self.camera_thread.wait()
+            if self.cam2_connected:
+                self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
+                self.cam2view.clear()
+
+
 
     # @pyqtSlot()
     # def start_clicked(self):

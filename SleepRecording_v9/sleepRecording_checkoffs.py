@@ -263,112 +263,112 @@ class PTime_counter(QObject):
 
             time.sleep(0.2)
 
-class worker_camera(QObject):
-    """
-    QThread object that runs the camera. Its signals display camera frames on the GUI and it also writes
-    video frames to an MKV stack.
+# class worker_camera(QObject):
+#     """
+#     QThread object that runs the camera. Its signals display camera frames on the GUI and it also writes
+#     video frames to an MKV stack.
 
-    One recently aadded feature is the self.f and self.f2 that writes timestamps for the video frames in 
-    a txt file.
+#     One recently aadded feature is the self.f and self.f2 that writes timestamps for the video frames in 
+#     a txt file.
 
-    Because of the way PyCapture2 package generates the image buffers (into a long list of pixel values), there is a bunch of numpy flipping
-    and transposing to get the image shape write to display it properly. I am guessing this is where the
-    inefficiency is coming from as each line requires new memory.
+#     Because of the way PyCapture2 package generates the image buffers (into a long list of pixel values), there is a bunch of numpy flipping
+#     and transposing to get the image shape write to display it properly. I am guessing this is where the
+#     inefficiency is coming from as each line requires new memory.
 
-    Also, there are two cameras in the same QObject that run at the same time. There should really be one object for
-    each camera. The logic behind defining this class as such was that I tried doing so, but failed to create two
-    individual video files. This was probably because I didn't use the right fourcc (some of the writer codecs can only be used one at a time. For example, XVID and H264.
-    The only ones that worked were for writing from two cameras were MJPG and DIVX). It should work now with using the write codec, but needs to be revised.
-    """
+#     Also, there are two cameras in the same QObject that run at the same time. There should really be one object for
+#     each camera. The logic behind defining this class as such was that I tried doing so, but failed to create two
+#     individual video files. This was probably because I didn't use the right fourcc (some of the writer codecs can only be used one at a time. For example, XVID and H264.
+#     The only ones that worked were for writing from two cameras were MJPG and DIVX). It should work now with using the write codec, but needs to be revised.
+#     """
 
-    signal_camFrame = pyqtSignal(str, np.ndarray, int)
+#     signal_camFrame = pyqtSignal(str, np.ndarray, int)
 
-    def __init__(self, preview_or_record, cam1, cam2 = 0):
-        super(worker_camera, self).__init__()
-        self.PoR = preview_or_record
-        self.camera_on = 0
-        self._cam1 = cam1
-        self._cam2 = cam2
-        self.writer = 0
-        self.writer2 = 0
-        self.prev_f1 = 0
-        self.prev_f2 = 0
+#     def __init__(self, preview_or_record, cam1, cam2 = 0):
+#         super(worker_camera, self).__init__()
+#         self.PoR = preview_or_record
+#         self.camera_on = 0
+#         self._cam1 = cam1
+#         self._cam2 = cam2
+#         self.writer = 0
+#         self.writer2 = 0
+#         self.prev_f1 = 0
+#         self.prev_f2 = 0
         
 
-    @pyqtSlot()
-    def run_camera(self):
-        if self.PoR == 'R':
-            self.f = open("cam1_timestamps.txt","w+")
-            self._cam1.writeRegister(0x1508, 0x82000000)
-            try:
-                self._cam2.writeRegister(0x1508, 0x82000000)
-                self.f2 = open("cam2_timestamps.txt","w+")
-            except:
-                pass
-        else:
-            self._cam1.writeRegister(0x1508, 0x80000000)
-            try:
-                self._cam2.writeRegister(0x1508, 0x80000000)
-            except:
-                pass
+#     @pyqtSlot()
+#     def run_camera(self):
+#         if self.PoR == 'R':
+#             self.f = open("cam1_timestamps.txt","w+")
+#             self._cam1.writeRegister(0x1508, 0x82000000)
+#             try:
+#                 self._cam2.writeRegister(0x1508, 0x82000000)
+#                 self.f2 = open("cam2_timestamps.txt","w+")
+#             except:
+#                 pass
+#         else:
+#             self._cam1.writeRegister(0x1508, 0x80000000)
+#             try:
+#                 self._cam2.writeRegister(0x1508, 0x80000000)
+#             except:
+#                 pass
 
-        while self.camera_on == 1:
-            try:
-                image = self._cam1.retrieveBuffer()
-                if self._cam2 != 0:
-                    image2 = self._cam2.retrieveBuffer()
-            except PyCapture2.Fc2error as fc2Err:
-                print "Error retrieving buffer : ", fc2Err
-                continue
-            self.imgt1 = image.getTimeStamp()
-            if self.PoR == 'R':
-                if len(str(self.imgt1.microSeconds)) == 6:
-                    self.f.write(str(self.imgt1.seconds)[-6:] + '.' + str(self.imgt1.microSeconds) + '\r\n')
-                else:
-                    self.f.write(str(self.imgt1.seconds)[-6:] + '.0' + str(self.imgt1.microSeconds) + '\r\n')
-            imgdat = image.getData()
-            if self.prev_f1 != self.imgt1:
-                imgnp = np.array(imgdat).reshape(image.getRows(),image.getCols())
-                imgnp = np.transpose(imgnp)
-                imgnp = np.flip(imgnp, 1)
-                imgnp = np.flip(imgnp, 0)
-                self.prev_f1 = self.imgt1
-                t1 = 1
-            else:
-                t1 = 0
+#         while self.camera_on == 1:
+#             try:
+#                 image = self._cam1.retrieveBuffer()
+#                 if self._cam2 != 0:
+#                     image2 = self._cam2.retrieveBuffer()
+#             except PyCapture2.Fc2error as fc2Err:
+#                 print "Error retrieving buffer : ", fc2Err
+#                 continue
+#             self.imgt1 = image.getTimeStamp()
+#             if self.PoR == 'R':
+#                 if len(str(self.imgt1.microSeconds)) == 6:
+#                     self.f.write(str(self.imgt1.seconds)[-6:] + '.' + str(self.imgt1.microSeconds) + '\r\n')
+#                 else:
+#                     self.f.write(str(self.imgt1.seconds)[-6:] + '.0' + str(self.imgt1.microSeconds) + '\r\n')
+#             imgdat = image.getData()
+#             if self.prev_f1 != self.imgt1:
+#                 imgnp = np.array(imgdat).reshape(image.getRows(),image.getCols())
+#                 imgnp = np.transpose(imgnp)
+#                 imgnp = np.flip(imgnp, 1)
+#                 imgnp = np.flip(imgnp, 0)
+#                 self.prev_f1 = self.imgt1
+#                 t1 = 1
+#             else:
+#                 t1 = 0
 
-            if self._cam2 != 0:
-                self.imgt2 = image2.getTimeStamp()
-                if self.PoR == 'R':
-                    if len(str(self.imgt2.microSeconds)) == 6:
-                        self.f2.write(str(self.imgt2.seconds)[-6:] + '.' + str(self.imgt2.microSeconds) + '\r\n')
-                    else:
-                        self.f2.write(str(self.imgt2.seconds)[-6:] + '.0' + str(self.imgt2.microSeconds) + '\r\n')
-                imgdat2 = image2.getData()
-                if self.prev_f2 != self.imgt2:
-                    imgnp2 = np.array(imgdat2).reshape(image2.getRows(),image2.getCols())
-                    imgnp2 = np.transpose(imgnp2)
-                    imgnp2 = np.flip(imgnp2, 1)
-                    imgnp2 = np.flip(imgnp2, 0)
-                    self.prev_f2 = self.imgt2
-                    t2 = 1
-                else:
-                    t2 = 0
+#             if self._cam2 != 0:
+#                 self.imgt2 = image2.getTimeStamp()
+#                 if self.PoR == 'R':
+#                     if len(str(self.imgt2.microSeconds)) == 6:
+#                         self.f2.write(str(self.imgt2.seconds)[-6:] + '.' + str(self.imgt2.microSeconds) + '\r\n')
+#                     else:
+#                         self.f2.write(str(self.imgt2.seconds)[-6:] + '.0' + str(self.imgt2.microSeconds) + '\r\n')
+#                 imgdat2 = image2.getData()
+#                 if self.prev_f2 != self.imgt2:
+#                     imgnp2 = np.array(imgdat2).reshape(image2.getRows(),image2.getCols())
+#                     imgnp2 = np.transpose(imgnp2)
+#                     imgnp2 = np.flip(imgnp2, 1)
+#                     imgnp2 = np.flip(imgnp2, 0)
+#                     self.prev_f2 = self.imgt2
+#                     t2 = 1
+#                 else:
+#                     t2 = 0
 
-            if self.PoR == 'R':
-                if t1 == 1:
-                    self.writer.write(np.uint8(imgnp))
-                if self._cam2 != 0:
-                    if t2 == 1:
-                        self.writer2.write(np.uint8(imgnp2))
-            if t1 == 1:
-                self.signal_camFrame.emit(self.PoR, imgnp, 1)
+#             if self.PoR == 'R':
+#                 if t1 == 1:
+#                     self.writer.write(np.uint8(imgnp))
+#                 if self._cam2 != 0:
+#                     if t2 == 1:
+#                         self.writer2.write(np.uint8(imgnp2))
+#             if t1 == 1:
+#                 self.signal_camFrame.emit(self.PoR, imgnp, 1)
 
-            if self._cam2 != 0:
-                if t2 == 1:
-                    self.signal_camFrame.emit(self.PoR, imgnp2, 2)
+#             if self._cam2 != 0:
+#                 if t2 == 1:
+#                     self.signal_camFrame.emit(self.PoR, imgnp2, 2)
             
-            time.sleep(0.01)
+#             time.sleep(0.01)
 
 class worker_getdata(QObject):
     """
