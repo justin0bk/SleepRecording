@@ -418,11 +418,35 @@ class main(QtWidgets.QMainWindow):
         
 
 
-    # def arduino_mode(self):
+    def arduino_mode_on(self):
+        port_avail = list(com_read.comports())
+        for p in port_avail:
+            if "Ard" in p[1] or "USB" in p[1]:
+                COM = p[0]
+        try:
+            self.comPort = serial.Serial(COM)
+            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_on"))
+            self.ard_on = True
+            self.controls['startbutton'].setDisabled(True)
+            QTimer.singleShot(1200, lambda: self.controls['startbutton'].setDisabled(False))
+        except ValueError:
+            self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
+            self.error_dialog.show()
+        except serial.SerialException:
+            self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
+            self.error_dialog.show()
+        except NameError:
+            self.error_dialog.setText("There is no arduino available")
+            self.error_dialog.show()
 
-    # def arduino_disconnect(self):
+    def arduino_disconnect(self):
+        if self.ard_on:
+            self.comPort.close()
+            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_off"))
+            self.ard_on = False
 
-    # def raspi_mode(self, ip):
+
+    # def raspi_mode_on(self, ip):
 
     # def raspi_disconnect(self):
 
@@ -431,10 +455,11 @@ class main(QtWidgets.QMainWindow):
         if not self.ard_on and not self.rpi_on:
             ip_address, okPressed = QInputDialog.getText(self, "Connecting to RPi","Type the IP address of your RPi (ie. 10.103.215.103) or skip to disregard", QLineEdit.Normal, "")
             if okPressed:
-                if ip_address != '':
-                    self.raspi_mode(ip_address)
+                if ip_address == '':
+                    self.arduino_mode_on()
                 else:
-                    self.arduino_mode()
+                    self.raspi_mode_on(ip_address)
+                    
         else:
             if self.ard_on:
                 self.arduino_disconnect()
@@ -584,22 +609,24 @@ class main(QtWidgets.QMainWindow):
 
             if self.cam1_connected:
                 self.stop_cameraThread(self.cam1, self.cam_obj1, self.cam_thread1)
-                self.cam1view.clear()
+                QTimer.singleShot(100, lambda: self.cam1view.clear())
 
             if self.cam2_connected:
                 self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
-                self.cam2view.clear()
+                QTimer.singleShot(100, lambda: self.cam2view.clear())
 
 
 
     # @pyqtSlot()
     # def start_clicked(self):
 
-    def enable_comment(self):
-        self.commentItems['entercomment'].setDisabled(False)
+
 
     # @pyqtSlot()
     # def stop_clicked(self):
+
+    def enable_comment(self):
+        self.commentItems['entercomment'].setDisabled(False)
 
     def disable_comment(self):
         self.commentItems['entercomment'].setDisabled(True)
@@ -609,15 +636,6 @@ class main(QtWidgets.QMainWindow):
 
     # @pyqtSlot()
     # def puloff_clicked(self):
-
-    @pyqtSlot()
-    def submit_comment(self):
-        self.f = open(self.todayis + "_notes.txt", 'a')
-        self.f.write("\r\n//")
-        self.f.write(time.asctime()[11:19] + " ")
-        self.f.write(self.commentItems['commentbox'].toPlainText())
-        self.commentItems['commentbox'].clear()
-        self.f.close()
 
     @pyqtSlot()
     def submit_comment(self):
@@ -639,6 +657,7 @@ class main(QtWidgets.QMainWindow):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
 
         self.cams_disconnect()
+        self.arduino_disconnect()
 
 
 
