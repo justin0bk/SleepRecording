@@ -111,6 +111,83 @@ def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
 
 
 ######## Main QThread objects ########
+class worker_countdown(QObject):
+    """
+    QThread object that runs timer for the experiment. 
+    This object is crucial for displaying the time count down until the experiment finished
+    Initiated with start button (connected to start_clicked).
+
+    On Delay:
+        Time ticks until delay is finished, then goes into the actual count down.
+        This function allows the actual data acquisition to start after a certain delay
+    When Delay is finished (or if delay is set as 0):
+        Still goes through the same process of finishing (ptimeDone) the delay mode,
+        then goes into the count down
+
+    """
+
+    signal_countdownDisplay = pyqtSignal(float, str)
+    signal_done = pyqtSignal()
+    signal_delayDone = pyqtSignal()
+    # signal_ptimeDone = pyqtSignal()
+    # signal_delayDone_wop = pyqtSignal()
+
+
+    def __init__(self, start_time = 0, expdur = 0, delay = 0):
+        super(worker_countdown, self).__init__()
+        self.countdown_on = False
+        # self.maxpg = maxpg
+        self.start_time = start_time
+        self.expdur = expdur
+        self.delay = delay
+        # self.p_enabled = p_enabled
+        self.delay_finished = False
+
+    def time2display(self, time_rem):
+        tm,ts = np.divmod(int(time_rem), 60)
+        th,tm = np.divmod(tm,60)
+        if len(str(tm)) == 1:
+            minute = "0" + str(tm)
+        else:
+            minute = str(tm)    
+        if len(str(ts)) == 1:
+            second = "0" + str(ts)
+        else:
+            second = str(ts)
+        time_display = str(th) + ":" + minute + ":" + second
+        return time_display
+
+    @pyqtSlot()
+    def run_countdown(self):
+        while self.countdown_on:
+            time_rem = (self.expdur*60*60 + self.delay*60) - (time.time()-self.start_time)
+            del_rem = (self.delay*60) - (time.time()-self.start_time)
+
+            # if time_rem < self.maxpg * 60 * 1.5: # end ol pulse gap countdown if there is less than maxpg time remaining
+            #     self.signal_ptimeDone.emit()
+
+            # if self.p_enabled: # send delay done signal if delay finished on ol mode
+            #     if time_rem - self.expdur*60*60 < 0.001 and self.delay_finished == 0:
+            #         self.delay_finished = 1
+            #         self.signal_delayDone.emit()
+
+            # else:  # send delay done signal without ol mode
+            if time_rem - self.expdur*60*60 < 0.001 and not self.delay_finished:
+                self.delay_finished = True
+
+
+            if time_rem < 0.001: # finish countdown
+                self.signal_done.emit()
+
+            # Emit signal for time remaining to be displayed
+            if self.delay_finished:
+                self.signal_countdownDisplay.emit(time_rem, self.time2display(time_rem))
+
+            else:
+                self.signal_countdownDisplay.emit(time_rem, "D: " + self.time2display(del_rem))
+
+            time.sleep(0.1)
+
 
 class worker_camera(QObject):
     """
@@ -406,15 +483,10 @@ class main(QtWidgets.QMainWindow):
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(False)
 
-    # @pyqtSlot()
-    # def run_default(self):
-        
-    # @pyqtSlot()
-    # def run_ol(self):
-        
-    # @pyqtSlot()
-    # def run_cl(self):
-        
+
+
+
+
 
 
     def arduino_mode_on(self):
@@ -463,6 +535,11 @@ class main(QtWidgets.QMainWindow):
                 self.arduino_disconnect()
             elif self.rpi_on:
                 self.raspi_disconnect()
+
+
+
+
+
 
 
     @pyqtSlot()
@@ -609,6 +686,11 @@ class main(QtWidgets.QMainWindow):
                 self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
                 QTimer.singleShot(100, lambda: self.cam2view.clear())
 
+   
+
+
+
+
     def create_mouselist(self):
         mouselist = []
         if self.mouseIDs['m1chk'].checkState() == 2:
@@ -752,12 +834,86 @@ class main(QtWidgets.QMainWindow):
         self.txt.write('#Notes:\t')
         self.txt.close()
 
+
+
+
+
+
+
+    def setup_countdown(self):
+        timer_thread = QThread(self)
+        timer_obj = worker_countdown(0, self.ui.expdur.value(), self.ui.delay.value())
+        timer_obj.moveToThread(timer_thread)
+        timer_obj.signal_countdownDisplay.connect(self.update_countdown)
+        timer_obj.signal_done.connect(self.stop_clicked)
+        # timer_obj.signal_delayDone.connect(self.setup_ol_countdown)
+        # timer_obj.signal_delayDone_wop.connect(self.s_recording)
+        # timer_obj.signal_ptimeDone.connect(self.end_ol_countdown)
+        timer_thread.started.connect(timer_obj.run_countdown)
+        return timer_obj, timer_thread
+
+    # @pyqtSlo()
+    # def setup_ol_countdown(self):
+    #     # if self.cam_connected_LED == 1:
+    #     #     self.camera_obj._cam1.writeRegister(0x1508, 0x82000000)
+    #     #     self.camera_obj.f = open("cam1_timestamps.txt","w+")
+    #     #     try:
+    #     #         self.camera_obj._cam2.writeRegister(0x1508, 0x82000000)
+    #     #         self.camera_obj.f2 = open("cam2_timestamps.txt","w+")
+    #     #     except:
+    #     #         pass
+    #     #     self.camera_obj.PoR = "R"
+
+    #     if self.ardorrasp == 'a':
+    #         self.comPort.write(bytearray(b'S\n'))
+            
+    #     self.ptimer_thread = QThread(self)
+    #     pstart_time = time.time()
+    #     self.ptimer_obj = PTime_counter(self.ui.expdur.value(), self.ui.pulsedur.value(), pstart_time, self.ui.minPG.value(), self.ui.maxPG.value())
+    #     self.ptimer_obj.moveToThread(self.ptimer_thread)
+    #     self.ptimer_obj.ptimer_on = 1
+    #     self.ptimer_obj.signal_PTimeRem.connect(self.update_PTimeRem)
+    #     self.ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
+    #     self.ptimer_thread.started.connect(self.ptimer_obj.run_pcount)
+    #     self.ptimer_thread.start()
+
+    #     QTimer.singleShot(100, self.run_spectral)
+
+    # @pyqtSlot()
+    # def end_ol_countdown(self):
+    #     try: 
+    #         self.ptimer_obj.ptimer_on = 0
+    #         self.ptimer_thread.quit()
+    #         self.ptimer_thread.wait()
+    #         if self.ui.pul_enable.checkState() == 2:
+    #             self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+    #     except AttributeError:
+    #         pass
+
+    @pyqtSlot(float, str)
+    def update_countdown(self, time_rem = 0, time_display = '0'):
+        self.time_rem = time_rem
+        if self.countdown_obj.countdown_on:
+            self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", time_display))
+        else:
+            self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "IDLE"))
+
+    # @pyqtSlot()
+    # def run_default(self):
+        
+    # @pyqtSlot()
+    # def run_ol(self):
+        
+    # @pyqtSlot()
+    # def run_cl(self):
+        
+
     @pyqtSlot()
     def start_clicked(self):
         if self.ard_on or self.rpi_on:
-            self.mouselist, empty = self.create_mouselist()
+            self.mouselist, mouselist_empty = self.create_mouselist()
             
-            if empty:
+            if mouselist_empty:
                 self.error_dialog.setText("There are no mice selected")
                 self.error_dialog.show() 
                 return
@@ -767,6 +923,13 @@ class main(QtWidgets.QMainWindow):
                 self.input_disable(True)
                 self.setupNotes()
                 self.enable_comment()
+
+                self.countdown_obj, self.countdown_thread = self.setup_countdown()
+                self.countdown_obj.countdown_on = True
+                self.countdown_obj.start_time = time.time()
+                self.countdown_thread.start()
+                
+
 
                 # add start time information using getTime function 
 
@@ -790,13 +953,22 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def stop_clicked(self):
-        self.start_on = False
-        self.input_disable(False)
-        self.disable_comment()
-        self.commentItems['commentHist'].clear()
-        self.commentItems['commentHist'].appendPlainText("Comment history:")
+
+        if self.start_on and not self.preview_on:
+            self.start_on = False
+            self.input_disable(False)
+            self.disable_comment()
+            self.commentItems['commentHist'].clear()
+            self.commentItems['commentHist'].appendPlainText("Comment history:")
+
+            self.countdown_obj.countdown_on = False
+            self.countdown_thread.quit()
+            self.countdown_thread.wait()
+            self.update_countdown()
+
+
         
-        self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
+            self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
 
 
 

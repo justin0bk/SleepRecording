@@ -1278,10 +1278,13 @@ class Ui_MainWindow(object):
         self.actionSave_Settings.setObjectName("actionSave_Settings")
         self.actionLoad_Settings = QtWidgets.QAction(MainWindow)
         self.actionLoad_Settings.setObjectName("actionLoad_Settings")
+        self.actionHelp = QtWidgets.QAction(MainWindow)
+        self.actionHelp.setObjectName("actionHelp")
         self.actionQuit = QtWidgets.QAction(MainWindow)
         self.actionQuit.setObjectName("actionQuit")
         self.menuFile.addAction(self.actionSave_Settings)
         self.menuFile.addAction(self.actionLoad_Settings)
+        self.menuFile.addAction(self.actionHelp)
         self.menuFile.addAction(self.actionQuit)
         self.menubar.addAction(self.menuFile.menuAction())
 
@@ -1409,6 +1412,8 @@ class Ui_MainWindow(object):
         self.startbutton.setText(_translate("MainWindow", "Start"))
         self.preview.setText(_translate("MainWindow", "Preview"))
         self.stopbutton.setText(_translate("MainWindow", "Stop"))
+        self.t_rem.setText(_translate("MainWindow", "IDLE"))
+        self.p_rem.setText(_translate("MainWindow", "IDLE"))
         self.label_connect_devices.setText(_translate("MainWindow", "Connect Devices"))
         self.connect_c1.setText(_translate("MainWindow", "Camera 1"))
         self.connect_c2.setText(_translate("MainWindow", "Camera 2"))
@@ -1450,6 +1455,7 @@ class Ui_MainWindow(object):
         self.menuFile.setTitle(_translate("MainWindow", "File"))
         self.actionSave_Settings.setText(_translate("MainWindow", "Save Settings"))
         self.actionLoad_Settings.setText(_translate("MainWindow", "Load Settings"))
+        self.actionHelp.setText(_translate("MainWindow", "Help"))
         self.actionQuit.setText(_translate("MainWindow", "Quit"))
 
 if __name__ == "__main__":

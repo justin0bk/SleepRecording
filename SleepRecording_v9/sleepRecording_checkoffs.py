@@ -483,12 +483,12 @@ class controlBoard(QtWidgets.QMainWindow):
         self.ui.startbutton.clicked.connect(self.start_clicked)
         self.ui.stopbutton.clicked.connect(self.stop_clicked)
         self.ui.cont.clicked.connect(self.disableCustomTime)
-        self.ui.preview.clicked.connect(self.preview_clicked)
-        self.ui.entercomment.clicked.connect(self.submittxt)
+        # self.ui.preview.clicked.connect(self.preview_clicked)
+        # self.ui.entercomment.clicked.connect(self.submittxt)
         # self.ui.pulseonbutton.clicked.connect(self.arduinoRsignal_C)
         # self.ui.pulseoffbutton.clicked.connect(self.pulseoff_clicked)
-        self.ui.arduino_btn.clicked.connect(self.a_clicked)
-        self.ui.cam_btn.clicked.connect(self.c_clicked)
+        # self.ui.arduino_btn.clicked.connect(self.a_clicked)
+        # self.ui.cam_btn.clicked.connect(self.c_clicked)
         self.ui.pul_enable.clicked.connect(self.disablePulses)
         self.ui.cl_enable.clicked.connect(self.closed_loopinit)
 
@@ -497,16 +497,16 @@ class controlBoard(QtWidgets.QMainWindow):
 
     # controlBoard methods to respond to inputs
 
-    @pyqtSlot()
-    def closed_loopinit(self):
-        if self.ui.cl_enable.checkState() == 2:
-            self.ui.pul_enable.setChecked(False)
-            self.disablePulses()
-            self.ui.pul_enable.setDisabled(True)
-        else:
-            self.ui.pul_enable.setChecked(True)
-            self.disablePulses()
-            self.ui.pul_enable.setDisabled(False)
+    # @pyqtSlot()
+    # def closed_loopinit(self):
+    #     if self.ui.cl_enable.checkState() == 2:
+    #         self.ui.pul_enable.setChecked(False)
+    #         self.disablePulses()
+    #         self.ui.pul_enable.setDisabled(True)
+    #     else:
+    #         self.ui.pul_enable.setChecked(True)
+    #         self.disablePulses()
+    #         self.ui.pul_enable.setDisabled(False)
 
 
     @pyqtSlot()
@@ -514,9 +514,9 @@ class controlBoard(QtWidgets.QMainWindow):
 
     # Checks if both the camera and arduino are connected
 
-        if self.ard_connected_LED == 0:
-            self.error_dialog.setText("You must connect the arduino first!")
-            self.error_dialog.show()
+        # if self.ard_connected_LED == 0:
+        #     self.error_dialog.setText("You must connect the arduino first!")
+        #     self.error_dialog.show()
 
         # Checks that the conditions are met for the program to start
 
@@ -530,64 +530,64 @@ class controlBoard(QtWidgets.QMainWindow):
                 QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'D' + str(self.ui.pulsedur.value()) + '\n')))
 
             
-            self.ui.startbutton.setStyleSheet("background-color: red")
+            # self.ui.startbutton.setStyleSheet("background-color: red")
             self.dur_time = int(self.ui.expdur.value()*60*60 + self.ui.delay.value()*60)
 
-            self.mouselist = []
+            # self.mouselist = []
 
-            if self.ui.m1chk.checkState() == 2:
-                self.mouselist.append(self.ui.id1.text())
-            if self.ui.m2chk.checkState() == 2:
-                self.mouselist.append(self.ui.id2.text())
-            if self.ui.m3chk.checkState() == 2:
-                self.mouselist.append(self.ui.id3.text())
-            if self.ui.m4chk.checkState() == 2:
-                self.mouselist.append(self.ui.id4.text())
+            # if self.ui.m1chk.checkState() == 2:
+            #     self.mouselist.append(self.ui.id1.text())
+            # if self.ui.m2chk.checkState() == 2:
+            #     self.mouselist.append(self.ui.id2.text())
+            # if self.ui.m3chk.checkState() == 2:
+            #     self.mouselist.append(self.ui.id3.text())
+            # if self.ui.m4chk.checkState() == 2:
+            #     self.mouselist.append(self.ui.id4.text())
 
-            # Disable all parameter inputs during the experiment
+            # # Disable all parameter inputs during the experiment
 
-            self.ui.ch1.setDisabled(True)
-            self.ui.id1.setDisabled(True)
-            self.ui.l1.setDisabled(True)
-            self.ui.m1chk.setDisabled(True)
-            self.ui.ch2.setDisabled(True)
-            self.ui.id2.setDisabled(True)
-            self.ui.l2.setDisabled(True)
-            self.ui.m2chk.setDisabled(True)
-            self.ui.ch3.setDisabled(True)
-            self.ui.id3.setDisabled(True)
-            self.ui.l3.setDisabled(True)
-            self.ui.m3chk.setDisabled(True)
-            self.ui.ch4.setDisabled(True)
-            self.ui.id4.setDisabled(True)
-            self.ui.l4.setDisabled(True)
-            self.ui.m4chk.setDisabled(True)
+            # self.ui.ch1.setDisabled(True)
+            # self.ui.id1.setDisabled(True)
+            # self.ui.l1.setDisabled(True)
+            # self.ui.m1chk.setDisabled(True)
+            # self.ui.ch2.setDisabled(True)
+            # self.ui.id2.setDisabled(True)
+            # self.ui.l2.setDisabled(True)
+            # self.ui.m2chk.setDisabled(True)
+            # self.ui.ch3.setDisabled(True)
+            # self.ui.id3.setDisabled(True)
+            # self.ui.l3.setDisabled(True)
+            # self.ui.m3chk.setDisabled(True)
+            # self.ui.ch4.setDisabled(True)
+            # self.ui.id4.setDisabled(True)
+            # self.ui.l4.setDisabled(True)
+            # self.ui.m4chk.setDisabled(True)
             
-            self.ui.sr.setDisabled(True)
-            self.ui.delay.setDisabled(True)
-            self.ui.expdur.setDisabled(True)
-            self.ui.pulsedur.setDisabled(True)
-            self.ui.minPG.setDisabled(True)
-            self.ui.maxPG.setDisabled(True)
-            self.ui.hi.setDisabled(True)
-            self.ui.lo.setDisabled(True)
-            self.ui.lid1.setDisabled(True)
-            self.ui.dialnum1.setDisabled(True)
-            self.ui.lid2.setDisabled(True)
-            self.ui.dialnum2.setDisabled(True)
+            # self.ui.sr.setDisabled(True)
+            # self.ui.delay.setDisabled(True)
+            # self.ui.expdur.setDisabled(True)
+            # self.ui.pulsedur.setDisabled(True)
+            # self.ui.minPG.setDisabled(True)
+            # self.ui.maxPG.setDisabled(True)
+            # self.ui.hi.setDisabled(True)
+            # self.ui.lo.setDisabled(True)
+            # self.ui.lid1.setDisabled(True)
+            # self.ui.dialnum1.setDisabled(True)
+            # self.ui.lid2.setDisabled(True)
+            # self.ui.dialnum2.setDisabled(True)
 
-            self.ui.cam_btn.setDisabled(True)
-            self.ui.arduino_btn.setDisabled(True)
-            self.ui.preview.setDisabled(True)
-            self.ui.entercomment.setDisabled(False)
-            self.ui.pulseonbutton.setDisabled(False)
-            self.ui.pulseoffbutton.setDisabled(False)
-            self.ui.pul_enable.setDisabled(True)
+            # self.ui.cam_btn.setDisabled(True)
+            # self.ui.arduino_btn.setDisabled(True)
+            # self.ui.preview.setDisabled(True)
+            # self.ui.entercomment.setDisabled(False)
+            # self.ui.pulseonbutton.setDisabled(False)
+            # self.ui.pulseoffbutton.setDisabled(False)
+            # self.ui.pul_enable.setDisabled(True)
 
             time_init = time.localtime()
             self.timetxt = str(time_init.tm_hour) + ':' + str(time_init.tm_min) + ':' + str(time_init.tm_sec)
 
-            self.setupNotes()
+            # self.setupNotes()
 
             # Activates GUI features to run during the experiment
             if self.ui.pul_enable.checkState() == 2:
@@ -911,104 +911,103 @@ class controlBoard(QtWidgets.QMainWindow):
             self.image_fft1[mousename].setImage(x)
             # self.image_fft2.setImage(y)
 
-    def setupNotes(self):
+    # def setupNotes(self):
+    # # Create prefix for all files using time library. self.todayis = "YearMonthDate_HrMinSec"
 
-    # Create prefix for all files using time library. self.todayis = "YearMonthDate_HrMinSec"
+    #     self.todayis = str(time.localtime().tm_year)[2:4]
+    #     self.dateNote = ''
 
-        self.todayis = str(time.localtime().tm_year)[2:4]
-        self.dateNote = ''
+    #     if len(str(time.localtime().tm_mon)) < 2:
+    #         self.todayis += '0' + str(time.localtime().tm_mon)
+    #         self.dateNote += '0' + str(time.localtime().tm_mon) + '/'
+    #     else:
+    #         self.todayis += str(time.localtime().tm_mon)
+    #         self.dateNote += str(time.localtime().tm_mon) + '/'
 
-        if len(str(time.localtime().tm_mon)) < 2:
-            self.todayis += '0' + str(time.localtime().tm_mon)
-            self.dateNote += '0' + str(time.localtime().tm_mon) + '/'
-        else:
-            self.todayis += str(time.localtime().tm_mon)
-            self.dateNote += str(time.localtime().tm_mon) + '/'
+    #     if len(str(time.localtime().tm_mday)) < 2:
+    #         self.todayis += '0' + str(time.localtime().tm_mday)
+    #         self.dateNote += '0' + str(time.localtime().tm_mday) + '/'
+    #     else:
+    #         self.todayis += str(time.localtime().tm_mday)
+    #         self.dateNote += str(time.localtime().tm_mday) + '/'
 
-        if len(str(time.localtime().tm_mday)) < 2:
-            self.todayis += '0' + str(time.localtime().tm_mday)
-            self.dateNote += '0' + str(time.localtime().tm_mday) + '/'
-        else:
-            self.todayis += str(time.localtime().tm_mday)
-            self.dateNote += str(time.localtime().tm_mday) + '/'
+    #     self.dateNote += str(time.localtime().tm_year)[2:4]
 
-        self.dateNote += str(time.localtime().tm_year)[2:4]
+    #     self.todayis += str('_')
+    #     if len(str(time.localtime().tm_hour)) < 2:
+    #         self.todayis += '0' + str(time.localtime().tm_hour)
+    #     else:
+    #         self.todayis += str(time.localtime().tm_hour)
 
-        self.todayis += str('_')
-        if len(str(time.localtime().tm_hour)) < 2:
-            self.todayis += '0' + str(time.localtime().tm_hour)
-        else:
-            self.todayis += str(time.localtime().tm_hour)
+    #     if len(str(time.localtime().tm_min)) < 2:
+    #         self.todayis += '0' + str(time.localtime().tm_min)
+    #     else:
+    #         self.todayis += str(time.localtime().tm_min)
+    #     if len(str(time.localtime().tm_sec)) < 2:
+    #         self.todayis += '0' + str(time.localtime().tm_sec)
+    #     else:
+    #         self.todayis += str(time.localtime().tm_sec)
 
-        if len(str(time.localtime().tm_min)) < 2:
-            self.todayis += '0' + str(time.localtime().tm_min)
-        else:
-            self.todayis += str(time.localtime().tm_min)
-        if len(str(time.localtime().tm_sec)) < 2:
-            self.todayis += '0' + str(time.localtime().tm_sec)
-        else:
-            self.todayis += str(time.localtime().tm_sec)
+    #     # Writes a txt file to include all experiment setting and variables
 
-        # Writes a txt file to include all experiment setting and variables
-
-        self.f = open(self.todayis + "_notes.txt","w+")
-        self.f.write('date:\t' + self.dateNote + '\r\n')
-        self.f.write('time:\t' + self.timetxt + '\r\n')
-        self.f.write('amplifier:\t' + 'intan' + '\r\n')
-        self.f.write('SR:\t' + str(self.ui.sr.value()) + '\r\n')
-        self.f.write('delay:\t' + str(self.ui.delay.value()) + '\r\n')
-        if self.ui.cl_enable.checkState() == 2:
-            self.f.write('mode:\t' + 'cl\r\n')
-        elif self.ui.pul_enable.checkState() == 2:
-            self.f.write('mode:\t' + 'ol\r\n')
-        else:
-            self.f.write('mode:\t' + 'none\r\n')
-        if self.ui.pul_enable.checkState() == 2:
-            self.f.write('laser_dur:\t' + str(self.ui.pulsedur.value()) + '\r\n')
-            self.f.write('laser_hi:\t' + str(self.ui.hi.value()) + '\r\n')
-            self.f.write('laser_lo:\t' + str(self.ui.lo.value()) + '\r\n')
-            self.f.write('stim_freq:\t' + str(int(1.0/(self.ui.hi.value()+self.ui.lo.value())/0.001)) + '\r\n')
-        self.f.write('exp_dur:\t' + str(self.ui.expdur.value()) + '\r\n')
-        self.f.write('mouse_ID:\t')
-        if self.ui.m1chk.checkState() == 2:
-            self.f.write(self.ui.id1.text() + '\t')
-        else:
-            self.f.write('\t ')
-        if self.ui.m2chk.checkState() == 2:
-            self.f.write(self.ui.id2.text() + '\t')
-        else:
-            self.f.write('\t ')
-        if self.ui.m3chk.checkState() == 2:
-            self.f.write(self.ui.id3.text() + '\t')
-        else:
-            self.f.write('\t ')
-        if self.ui.m4chk.checkState() == 2:
-            self.f.write(self.ui.id4.text())
-        else:
-            self.f.write('\t ')
-        self.f.write('\r\n')
-        self.f.write('ch_alloc:\t')
-        if self.ui.m1chk.checkState() == 2:
-            self.f.write(self.ui.ch1.text() + '\t')
-        if self.ui.m2chk.checkState() == 2:
-            self.f.write(self.ui.ch2.text() + '\t')
-        if self.ui.m3chk.checkState() == 2:
-            self.f.write(self.ui.ch3.text() + '\t')
-        if self.ui.m4chk.checkState() == 2:
-            self.f.write(self.ui.ch4.text())
-        self.f.write('\r\n')
-        self.f.write('laser_used:\t')
-        if self.ui.m1chk.checkState() == 2:
-            self.f.write(self.ui.l1.text() + '\t')
-        if self.ui.m2chk.checkState() == 2:
-            self.f.write(self.ui.l2.text() + '\t')
-        if self.ui.m3chk.checkState() == 2:
-            self.f.write(self.ui.l3.text() + '\t')
-        if self.ui.m4chk.checkState() == 2:
-            self.f.write(self.ui.l4.text())
-        self.f.write('\r\n')
-        self.f.write('#Notes:\t')
-        self.f.close()
+    #     self.f = open(self.todayis + "_notes.txt","w+")
+    #     self.f.write('date:\t' + self.dateNote + '\r\n')
+    #     self.f.write('time:\t' + self.timetxt + '\r\n')
+    #     self.f.write('amplifier:\t' + 'intan' + '\r\n')
+    #     self.f.write('SR:\t' + str(self.ui.sr.value()) + '\r\n')
+    #     self.f.write('delay:\t' + str(self.ui.delay.value()) + '\r\n')
+    #     if self.ui.cl_enable.checkState() == 2:
+    #         self.f.write('mode:\t' + 'cl\r\n')
+    #     elif self.ui.pul_enable.checkState() == 2:
+    #         self.f.write('mode:\t' + 'ol\r\n')
+    #     else:
+    #         self.f.write('mode:\t' + 'none\r\n')
+    #     if self.ui.pul_enable.checkState() == 2:
+    #         self.f.write('laser_dur:\t' + str(self.ui.pulsedur.value()) + '\r\n')
+    #         self.f.write('laser_hi:\t' + str(self.ui.hi.value()) + '\r\n')
+    #         self.f.write('laser_lo:\t' + str(self.ui.lo.value()) + '\r\n')
+    #         self.f.write('stim_freq:\t' + str(int(1.0/(self.ui.hi.value()+self.ui.lo.value())/0.001)) + '\r\n')
+    #     self.f.write('exp_dur:\t' + str(self.ui.expdur.value()) + '\r\n')
+    #     self.f.write('mouse_ID:\t')
+    #     if self.ui.m1chk.checkState() == 2:
+    #         self.f.write(self.ui.id1.text() + '\t')
+    #     else:
+    #         self.f.write('\t ')
+    #     if self.ui.m2chk.checkState() == 2:
+    #         self.f.write(self.ui.id2.text() + '\t')
+    #     else:
+    #         self.f.write('\t ')
+    #     if self.ui.m3chk.checkState() == 2:
+    #         self.f.write(self.ui.id3.text() + '\t')
+    #     else:
+    #         self.f.write('\t ')
+    #     if self.ui.m4chk.checkState() == 2:
+    #         self.f.write(self.ui.id4.text())
+    #     else:
+    #         self.f.write('\t ')
+    #     self.f.write('\r\n')
+    #     self.f.write('ch_alloc:\t')
+    #     if self.ui.m1chk.checkState() == 2:
+    #         self.f.write(self.ui.ch1.text() + '\t')
+    #     if self.ui.m2chk.checkState() == 2:
+    #         self.f.write(self.ui.ch2.text() + '\t')
+    #     if self.ui.m3chk.checkState() == 2:
+    #         self.f.write(self.ui.ch3.text() + '\t')
+    #     if self.ui.m4chk.checkState() == 2:
+    #         self.f.write(self.ui.ch4.text())
+    #     self.f.write('\r\n')
+    #     self.f.write('laser_used:\t')
+    #     if self.ui.m1chk.checkState() == 2:
+    #         self.f.write(self.ui.l1.text() + '\t')
+    #     if self.ui.m2chk.checkState() == 2:
+    #         self.f.write(self.ui.l2.text() + '\t')
+    #     if self.ui.m3chk.checkState() == 2:
+    #         self.f.write(self.ui.l3.text() + '\t')
+    #     if self.ui.m4chk.checkState() == 2:
+    #         self.f.write(self.ui.l4.text())
+    #     self.f.write('\r\n')
+    #     self.f.write('#Notes:\t')
+    #     self.f.close()
 
 
     @pyqtSlot(float, str)
@@ -1154,45 +1153,45 @@ class controlBoard(QtWidgets.QMainWindow):
 
 
 
-            self.ui.ch1.setDisabled(False)
-            self.ui.id1.setDisabled(False)
-            self.ui.l1.setDisabled(False)
-            self.ui.m1chk.setDisabled(False)
-            self.ui.ch2.setDisabled(False)
-            self.ui.id2.setDisabled(False)
-            self.ui.l2.setDisabled(False)
-            self.ui.m2chk.setDisabled(False)
-            self.ui.ch3.setDisabled(False)
-            self.ui.id3.setDisabled(False)
-            self.ui.l3.setDisabled(False)
-            self.ui.m3chk.setDisabled(False)
-            self.ui.ch4.setDisabled(False)
-            self.ui.id4.setDisabled(False)
-            self.ui.l4.setDisabled(False)
-            self.ui.m4chk.setDisabled(False) 
+            # self.ui.ch1.setDisabled(False)
+            # self.ui.id1.setDisabled(False)
+            # self.ui.l1.setDisabled(False)
+            # self.ui.m1chk.setDisabled(False)
+            # self.ui.ch2.setDisabled(False)
+            # self.ui.id2.setDisabled(False)
+            # self.ui.l2.setDisabled(False)
+            # self.ui.m2chk.setDisabled(False)
+            # self.ui.ch3.setDisabled(False)
+            # self.ui.id3.setDisabled(False)
+            # self.ui.l3.setDisabled(False)
+            # self.ui.m3chk.setDisabled(False)
+            # self.ui.ch4.setDisabled(False)
+            # self.ui.id4.setDisabled(False)
+            # self.ui.l4.setDisabled(False)
+            # self.ui.m4chk.setDisabled(False) 
     
-            self.ui.sr.setDisabled(False)
-            self.ui.delay.setDisabled(False)
-            self.ui.expdur.setDisabled(False)
-            self.ui.pulsedur.setDisabled(False)
-            self.ui.minPG.setDisabled(False)
-            self.ui.maxPG.setDisabled(False)
-            self.ui.hi.setDisabled(False)
-            self.ui.lo.setDisabled(False)
-            self.ui.lid1.setDisabled(False)
-            self.ui.dialnum1.setDisabled(False)
-            self.ui.lid2.setDisabled(False)
-            self.ui.dialnum2.setDisabled(False)
+            # self.ui.sr.setDisabled(False)
+            # self.ui.delay.setDisabled(False)
+            # self.ui.expdur.setDisabled(False)
+            # self.ui.pulsedur.setDisabled(False)
+            # self.ui.minPG.setDisabled(False)
+            # self.ui.maxPG.setDisabled(False)
+            # self.ui.hi.setDisabled(False)
+            # self.ui.lo.setDisabled(False)
+            # self.ui.lid1.setDisabled(False)
+            # self.ui.dialnum1.setDisabled(False)
+            # self.ui.lid2.setDisabled(False)
+            # self.ui.dialnum2.setDisabled(False)
 
-            self.ui.cam_btn.setDisabled(False)
-            self.ui.arduino_btn.setDisabled(False)
-            self.ui.preview.setDisabled(False)
-            self.ui.entercomment.setDisabled(True)
-            self.ui.pulseonbutton.setDisabled(True)
-            self.ui.pulseoffbutton.setDisabled(True)
-            self.ui.pul_enable.setDisabled(False)
+            # self.ui.cam_btn.setDisabled(False)
+            # self.ui.arduino_btn.setDisabled(False)
+            # self.ui.preview.setDisabled(False)
+            # self.ui.entercomment.setDisabled(True)
+            # self.ui.pulseonbutton.setDisabled(True)
+            # self.ui.pulseoffbutton.setDisabled(True)
+            # self.ui.pul_enable.setDisabled(False)
 
-            self.disablePulses()
+            # self.disablePulses()
 
             self.f = open(self.todayis + "_notes.txt", 'a')
             self.f.write('\r\n')
@@ -1353,7 +1352,7 @@ class controlBoard(QtWidgets.QMainWindow):
     @pyqtSlot()
     def a_clicked(self):
 
-        if self.ard_connected_LED == 0:
+        # if self.ard_connected_LED == 0:
 
             # establish connection with RPi
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1377,38 +1376,38 @@ class controlBoard(QtWidgets.QMainWindow):
                             if "Ard" in p[1] or "USB" in p[1]:
                                 COM = p[0]
 
-                        try:
-                            self.comPort = serial.Serial(COM)
-                            self.ui.arduino_on.setPixmap(QtGui.QPixmap("green-led-on.png"))
-                            self.ard_connected_LED = 1
-                            self.ui.startbutton.setDisabled(True)
-                            QTimer.singleShot(1200, lambda: self.ui.startbutton.setDisabled(False))
-                            self.ardorrasp = 'a'
-                        except serial.SerialException:
-                            self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
-                            self.error_dialog.show()
-                        except NameError:
-                            self.error_dialog.setText("There is no arduino available")
-                            self.error_dialog.show()
-            else:
-                port_avail = list(com_read.comports())
-                for p in port_avail:
-                    if "Ard" in p[1] or "USB" in p[1]:
-                        COM = p[0]
+                        # try:
+                        #     self.comPort = serial.Serial(COM)
+                        #     self.ui.arduino_on.setPixmap(QtGui.QPixmap("green-led-on.png"))
+                        #     self.ard_connected_LED = 1
+                        #     self.ui.startbutton.setDisabled(True)
+                        #     QTimer.singleShot(1200, lambda: self.ui.startbutton.setDisabled(False))
+                        #     self.ardorrasp = 'a'
+                        # except serial.SerialException:
+                        #     self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
+                        #     self.error_dialog.show()
+                        # except NameError:
+                        #     self.error_dialog.setText("There is no arduino available")
+                        #     self.error_dialog.show()
+            # else:
+            #     port_avail = list(com_read.comports())
+            #     for p in port_avail:
+            #         if "Ard" in p[1] or "USB" in p[1]:
+            #             COM = p[0]
 
-                try:
-                    self.comPort = serial.Serial(COM)
-                    self.ui.arduino_on.setPixmap(QtGui.QPixmap("green-led-on.png"))
-                    self.ard_connected_LED = 1
-                    self.ui.startbutton.setDisabled(True)
-                    QTimer.singleShot(1200, lambda: self.ui.startbutton.setDisabled(False))
-                    self.ardorrasp = 'a'
-                except serial.SerialException:
-                    self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
-                    self.error_dialog.show()
-                except NameError:
-                    self.error_dialog.setText("There is no arduino available")
-                    self.error_dialog.show()
+                # try:
+                #     self.comPort = serial.Serial(COM)
+                #     self.ui.arduino_on.setPixmap(QtGui.QPixmap("green-led-on.png"))
+                #     self.ard_connected_LED = 1
+                #     self.ui.startbutton.setDisabled(True)
+                #     QTimer.singleShot(1200, lambda: self.ui.startbutton.setDisabled(False))
+                #     self.ardorrasp = 'a'
+                # except serial.SerialException:
+                #     self.error_dialog.setText("There is a problem connecting to the ComPort. Try reconnecting the USB")
+                #     self.error_dialog.show()
+                # except NameError:
+                #     self.error_dialog.setText("There is no arduino available")
+                #     self.error_dialog.show()
 
         else:
             try:
@@ -1417,18 +1416,18 @@ class controlBoard(QtWidgets.QMainWindow):
                     self.s.close()
                     self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
                     self.ard_connected_LED = 0
-                else:
-                    self.comPort.close()
-                    self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
-                    self.ard_connected_LED = 0
-            except NameError:
-                print('self.comPort not created yet')
-                self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
-                self.ard_connected_LED = 0
-            except AttributeError:
-                print('self.comPort not created yet')
-                self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
-                self.ard_connected_LED = 0
+                # else:
+                #     self.comPort.close()
+                #     self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
+                #     self.ard_connected_LED = 0
+            # except NameError:
+            #     print('self.comPort not created yet')
+            #     self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
+            #     self.ard_connected_LED = 0
+            # except AttributeError:
+            #     print('self.comPort not created yet')
+            #     self.ui.arduino_on.setPixmap(QtGui.QPixmap("led-red-on.png"))
+            #     self.ard_connected_LED = 0
 
 
 
