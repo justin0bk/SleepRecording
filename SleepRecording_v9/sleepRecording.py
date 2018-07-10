@@ -129,18 +129,14 @@ class worker_countdown(QObject):
     signal_countdownDisplay = pyqtSignal(float, str)
     signal_done = pyqtSignal()
     signal_delayDone = pyqtSignal()
-    # signal_ptimeDone = pyqtSignal()
-    # signal_delayDone_wop = pyqtSignal()
 
 
     def __init__(self, start_time = 0, expdur = 0, delay = 0):
         super(worker_countdown, self).__init__()
         self.countdown_on = False
-        # self.maxpg = maxpg
         self.start_time = start_time
         self.expdur = expdur
         self.delay = delay
-        # self.p_enabled = p_enabled
         self.delay_finished = False
 
     def time2display(self, time_rem):
@@ -161,33 +157,80 @@ class worker_countdown(QObject):
     def run_countdown(self):
         while self.countdown_on:
             time_rem = (self.expdur*60*60 + self.delay*60) - (time.time()-self.start_time)
-            del_rem = (self.delay*60) - (time.time()-self.start_time)
+            delay_rem = (self.delay*60) - (time.time()-self.start_time)
 
-            # if time_rem < self.maxpg * 60 * 1.5: # end ol pulse gap countdown if there is less than maxpg time remaining
-            #     self.signal_ptimeDone.emit()
-
-            # if self.p_enabled: # send delay done signal if delay finished on ol mode
-            #     if time_rem - self.expdur*60*60 < 0.001 and self.delay_finished == 0:
-            #         self.delay_finished = 1
-            #         self.signal_delayDone.emit()
-
-            # else:  # send delay done signal without ol mode
+            # send delay done signal without ol mode
             if time_rem - self.expdur*60*60 < 0.001 and not self.delay_finished:
                 self.delay_finished = True
-
-
-            if time_rem < 0.001: # finish countdown
-                self.signal_done.emit()
+                self.signal_delayDone.emit()
 
             # Emit signal for time remaining to be displayed
             if self.delay_finished:
                 self.signal_countdownDisplay.emit(time_rem, self.time2display(time_rem))
 
             else:
-                self.signal_countdownDisplay.emit(time_rem, "D: " + self.time2display(del_rem))
+                self.signal_countdownDisplay.emit(time_rem, "D: " + self.time2display(delay_rem))
+
+            # Finish countdown
+            if time_rem < 0.001:
+                self.signal_done.emit()
 
             time.sleep(0.1)
 
+class PTime_counter(QObject):
+    """
+    QThread object that run when the open-loop mode has been turned on. This keeps track of
+    time gaps between pulse trains (properties of the pulse trains are set using GUI inputs).
+    Works very similarly to TotTime_counter, but this one runs a separate counter to count down
+    time for the open-loop pulses.
+
+    This object is supposed to close some time before the experiment ends (i.e. when the
+    stop_clicked function is run to stop the recording)
+    """
+
+    signal_PTimeRem = pyqtSignal(float, str)
+    signal_firePulses = pyqtSignal()
+
+    def __init__(self, expdur = 0 , puldur = 0, pt_start = 0, minpg = 15, maxpg = 25):
+        super(PTime_counter, self).__init__()
+        self.ptimer_on = 0
+        self._pstart_time = pt_start
+        self._puldur = puldur
+        self._minpg = minpg
+        self._maxpg = maxpg
+        if minpg*60 < puldur:
+            self.pulGap = int(np.random.uniform(puldur, maxpg*60))
+        else:
+            self.pulGap = int(np.random.uniform(minpg, maxpg)*60)
+        self.writer = None
+
+    def run_pcount(self):
+        while self.ptimer_on == 1:
+            ptime_rem = self.pulGap - (time.time()-self._pstart_time)
+            if ptime_rem < 0.001:
+                self.signal_firePulses.emit()
+
+                ptime_rem = self.pulGap - (time.time()-self._pstart_time)
+                self._pstart_time = time.time()
+                if self._minpg*60 < self._puldur:
+                    self.pulGap = int(np.random.uniform(self._puldur, self._maxpg*60))
+                else:
+                    self.pulGap = int(np.random.uniform(self._minpg, self._maxpg)*60)
+
+            pm,ps = np.divmod(int(ptime_rem), 60)
+            ph,pm = np.divmod(pm,60)
+            if len(str(pm)) == 1:
+                minute = "0" + str(pm)
+            else:
+                minute = str(pm)    
+            if len(str(ps)) == 1:
+                second = "0" + str(ps)
+            else:
+                second = str(ps)
+            ptime_display = str(ph) + ":" + minute + ":" + second
+            self.signal_PTimeRem.emit(ptime_rem, ptime_display)
+
+            time.sleep(0.2)
 
 class worker_camera(QObject):
     """
@@ -288,8 +331,8 @@ class main(QtWidgets.QMainWindow):
         self.connect_signals()
 
         #### Start from default setup ####
-        self.disable_comment()
-        self.protocol_setup()
+        self.disable_comment(True)
+        self.inputSetup()
 
     def define_variables(self):
         #### GUI placeholder variables
@@ -451,7 +494,7 @@ class main(QtWidgets.QMainWindow):
     def connect_signals(self):
         #### Connecting Signals and Slots ####
         for protocol in self.protocols:
-            self.protocols[protocol].clicked.connect(self.protocol_setup)
+            self.protocols[protocol].clicked.connect(self.inputSetup)
         self.devices['connect_controller'].clicked.connect(self.comm_connect)
         self.devices['connect_c1'].clicked.connect(self.cam1_setup)
         self.devices['connect_c2'].clicked.connect(self.cam2_setup)
@@ -462,26 +505,34 @@ class main(QtWidgets.QMainWindow):
         # self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
         self.commentItems['entercomment'].clicked.connect(self.submit_comment)
 
+    def disable_customPulse(self, disable):
+        for item in self.pulseControls:
+            self.pulseControls[item].setDisabled(disable)
+
     @pyqtSlot()
-    def protocol_setup(self):
+    def inputSetup(self):
+        """Disable settings used for other protocols"""
         if self.protocols['option_default'].isChecked():
-            # Disable settings used for other protocols
+
             self.parameters['maxPG'].setDisabled(True)
             self.parameters['minPG'].setDisabled(True)
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(True)
+            self.disable_customPulse(False)
 
         elif self.protocols['option_ol'].isChecked():
             self.parameters['maxPG'].setDisabled(False)
             self.parameters['minPG'].setDisabled(False)
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(True)
+            self.disable_customPulse(True)
 
         else:
             self.parameters['maxPG'].setDisabled(True)
             self.parameters['minPG'].setDisabled(True)
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(False)
+            self.disable_customPulse(False)
 
 
 
@@ -714,7 +765,7 @@ class main(QtWidgets.QMainWindow):
                 self.parameters[param].setDisabled(disable)
             for prop in self.mouseIDs:
                 self.mouseIDs[prop].setDisabled(disable)
-            self.protocol_setup()
+            self.inputSetup()
 
     def getTime(self):
 
@@ -846,49 +897,22 @@ class main(QtWidgets.QMainWindow):
         timer_obj.moveToThread(timer_thread)
         timer_obj.signal_countdownDisplay.connect(self.update_countdown)
         timer_obj.signal_done.connect(self.stop_clicked)
-        # timer_obj.signal_delayDone.connect(self.setup_ol_countdown)
-        # timer_obj.signal_delayDone_wop.connect(self.s_recording)
-        # timer_obj.signal_ptimeDone.connect(self.end_ol_countdown)
+        timer_obj.signal_delayDone.connect(self.beginProtocol)
         timer_thread.started.connect(timer_obj.run_countdown)
         return timer_obj, timer_thread
 
-    # @pyqtSlo()
-    # def setup_ol_countdown(self):
-    #     # if self.cam_connected_LED == 1:
-    #     #     self.camera_obj._cam1.writeRegister(0x1508, 0x82000000)
-    #     #     self.camera_obj.f = open("cam1_timestamps.txt","w+")
-    #     #     try:
-    #     #         self.camera_obj._cam2.writeRegister(0x1508, 0x82000000)
-    #     #         self.camera_obj.f2 = open("cam2_timestamps.txt","w+")
-    #     #     except:
-    #     #         pass
-    #     #     self.camera_obj.PoR = "R"
+    def setup_ptimer(self):
+        ptimer_thread = QThread(self)
+        pstart_time = time.time()
+        ptimer_obj = PTime_counter(self.ui.expdur.value(), self.ui.pulsedur.value(), pstart_time, self.ui.minPG.value(), self.ui.maxPG.value())
+        ptimer_obj.moveToThread(self.ptimer_thread)
+        ptimer_obj.ptimer_on = 1
+        # ptimer_obj.signal_PTimeRem.connect(self.update_PTimeRem)
+        # ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
+        ptimer_thread.started.connect(ptimer_obj.run_pcount)
+        ptimer_thread.start()
+        return ptimer_obj, ptimer_thread
 
-    #     if self.ardorrasp == 'a':
-    #         self.comPort.write(bytearray(b'S\n'))
-            
-    #     self.ptimer_thread = QThread(self)
-    #     pstart_time = time.time()
-    #     self.ptimer_obj = PTime_counter(self.ui.expdur.value(), self.ui.pulsedur.value(), pstart_time, self.ui.minPG.value(), self.ui.maxPG.value())
-    #     self.ptimer_obj.moveToThread(self.ptimer_thread)
-    #     self.ptimer_obj.ptimer_on = 1
-    #     self.ptimer_obj.signal_PTimeRem.connect(self.update_PTimeRem)
-    #     self.ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
-    #     self.ptimer_thread.started.connect(self.ptimer_obj.run_pcount)
-    #     self.ptimer_thread.start()
-
-    #     QTimer.singleShot(100, self.run_spectral)
-
-    # @pyqtSlot()
-    # def end_ol_countdown(self):
-    #     try: 
-    #         self.ptimer_obj.ptimer_on = 0
-    #         self.ptimer_thread.quit()
-    #         self.ptimer_thread.wait()
-    #         if self.ui.pul_enable.checkState() == 2:
-    #             self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
-    #     except AttributeError:
-    #         pass
 
     @pyqtSlot(float, str)
     def update_countdown(self, time_rem = 0, time_display = '0'):
@@ -898,15 +922,43 @@ class main(QtWidgets.QMainWindow):
         else:
             self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "IDLE"))
 
-    # @pyqtSlot()
+
+    def setupProtocol(self):
+        if self.ard_on and self.protocols['option_ol'].isChecked:
+            try:
+                self.comPort.write(bytearray(b'H' + str(self.parameters['hi'].value()) + '\n'))
+                self.comPort.write(bytearray(b'L' + str(self.parameters['lo'].value()) + '\n'))
+                self.comPort.write(bytearray(b'D' + str(self.parameters['pulsedur'].value()) + '\n'))
+                if self.parameters['delay'].value() != 0:
+                    self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "On Delay"))
+            except:
+                self.error_dialog.setText("Pulse information tranfer failed")
+                self.error_dialog.show()
+
+        # elif self.rpi_on:
+
+        self.countdown_obj, self.countdown_thread = self.setup_countdown()
+        self.countdown_obj.countdown_on = True
+        self.countdown_obj.start_time = time.time()
+
+    @pyqtSlot()
+    def beginProtocol(self):
+        if self.protocols['option_default'].isChecked:
+            self.run_default()
+        if self.protocols['option_ol'].isChecked:
+            self.run_ol()
+        if self.protocols['option_cl'].isChecked:
+            self.run_cl()
+        if self.protocols['option_remdep'].isChecked:
+            self.run_cl()
+        if self.protocols['option_nremdep'].isChecked:
+            self.run_cl()
+
     # def run_default(self):
         
-    # @pyqtSlot()
     # def run_ol(self):
         
-    # @pyqtSlot()
     # def run_cl(self):
-        
 
     @pyqtSlot()
     def start_clicked(self):
@@ -921,28 +973,16 @@ class main(QtWidgets.QMainWindow):
             if not self.start_on and not self.preview_on:
                 self.start_on = True
                 self.input_disable(True)
+                self.expdur_sec = (self.ui.expdur.value()*60*60)
                 self.setupNotes()
-                self.enable_comment()
+                self.disable_comment(False)
+                self.setupProtocol()
 
-                self.countdown_obj, self.countdown_thread = self.setup_countdown()
-                self.countdown_obj.countdown_on = True
-                self.countdown_obj.start_time = time.time()
                 self.countdown_thread.start()
-                
 
 
-                # add start time information using getTime function 
+                # Finish arduino commands and rpi commands
 
-                # Finish arduino commans and rpi commands
-
-                # if self.ard_on:
-                #     self.controls['startbutton'].setStyleSheet("background-color: red")
-                #     self.comPort.write(bytearray(b'H' + str(self.parameters['hi'].value()) + '\n'))
-                #     self.comPort.write(bytearray(b'L' + str(self.parameters['lo'].value()) + '\n'))
-                #     self.comPort.write(bytearray(b'D' + str(self.parameters['pulsedur'].value()) + '\n'))
-
-
-                # elif self.rpi_on:
 
                 self.controls['startbutton'].setStyleSheet("background-color: red")
 
@@ -956,8 +996,9 @@ class main(QtWidgets.QMainWindow):
 
         if self.start_on and not self.preview_on:
             self.start_on = False
+            self.graphicsView.clear()
             self.input_disable(False)
-            self.disable_comment()
+            self.disable_comment(True)
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
 
@@ -966,8 +1007,6 @@ class main(QtWidgets.QMainWindow):
             self.countdown_thread.wait()
             self.update_countdown()
 
-
-        
             self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
 
 
@@ -978,11 +1017,8 @@ class main(QtWidgets.QMainWindow):
     # @pyqtSlot()
     # def puloff_clicked(self):
 
-    def enable_comment(self):
-        self.commentItems['entercomment'].setDisabled(False)
-
-    def disable_comment(self):
-        self.commentItems['entercomment'].setDisabled(True)
+    def disable_comment(self, disable):
+        self.commentItems['entercomment'].setDisabled(disable)
 
     @pyqtSlot()
     def submit_comment(self):
@@ -999,12 +1035,11 @@ class main(QtWidgets.QMainWindow):
         self.commentItems['commentHist'].appendPlainText("\r\n" + time.asctime()[11:19] + " " + new_txt)
         self.commentItems['commentbox'].clear()
 
-
     def closeEvent(self, *args, **kwargs):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
-
         self.cams_disconnect()
         self.arduino_disconnect()
+        self.stop_clicked()
 
 
 

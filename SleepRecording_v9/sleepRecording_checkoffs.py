@@ -126,142 +126,142 @@ but these different versions haven't been merged. The other version doesn't have
 feature, but can run spectrogram without the REM threshold values.
 """
 
-class TotTime_counter(QObject):
-    """
-    QThread object that runs timer for the experiment. 
-    This object is crucial for displaying the time count down until the experiment finished
-    Initiated with start button (connected to start_clicked).
+# class TotTime_counter(QObject):
+#     """
+#     QThread object that runs timer for the experiment. 
+#     This object is crucial for displaying the time count down until the experiment finished
+#     Initiated with start button (connected to start_clicked).
 
-    On Delay:
-        Time ticks until delay is finished, then goes into the actual count down.
-        This function allows the actual data acquisition to start after a certain delay
-    When Delay is finished (or if delay is set as 0):
-        Still goes through the same process of finishing (ptimeDone) the delay mode,
-        then goes into the count down
+#     On Delay:
+#         Time ticks until delay is finished, then goes into the actual count down.
+#         This function allows the actual data acquisition to start after a certain delay
+#     When Delay is finished (or if delay is set as 0):
+#         Still goes through the same process of finishing (ptimeDone) the delay mode,
+#         then goes into the count down
 
-    """
+#     """
 
-    signal_TimeRem = pyqtSignal(float, str)
-    signal_done = pyqtSignal()
-    signal_delayDone = pyqtSignal()
-    signal_ptimeDone = pyqtSignal()
-    signal_delayDone_wop = pyqtSignal()
+#     signal_TimeRem = pyqtSignal(float, str)
+#     signal_done = pyqtSignal()
+#     signal_delayDone = pyqtSignal()
+#     signal_ptimeDone = pyqtSignal()
+#     signal_delayDone_wop = pyqtSignal()
 
 
-    def __init__(self, maxpg = 25, p_enabled = 2, t_start = 0, expdur = 0, delay = 0):
-        super(TotTime_counter, self).__init__()
-        self.timer_on = 0
-        self._maxpg = maxpg
-        self._start_time = t_start
-        self._expdur = expdur
-        self._delay = delay
-        self._p_on = p_enabled
-        self.delay_finished = 0
+#     def __init__(self, maxpg = 25, p_enabled = 2, t_start = 0, expdur = 0, delay = 0):
+#         super(TotTime_counter, self).__init__()
+#         self.timer_on = 0
+#         self._maxpg = maxpg
+#         self._start_time = t_start
+#         self._expdur = expdur
+#         self._delay = delay
+#         self._p_on = p_enabled
+#         self.delay_finished = 0
 
-    @pyqtSlot()
-    def run_count(self):
-        while self.timer_on == 1:
-            time_rem = (self._expdur*60*60 + self._delay*60) - (time.time()-self._start_time)
-            del_rem = (self._delay*60) - (time.time()-self._start_time)
-            if time_rem < self._maxpg * 60 * 1.5:
-                self.signal_ptimeDone.emit()
-            if time_rem < 0.001:
-                self.signal_done.emit()
-            if self._p_on == 2:
-                if time_rem - self._expdur*60*60 < 0.001 and self.delay_finished == 0:
-                    self.delay_finished = 1
-                    self.signal_delayDone.emit()
-            else:
-                if time_rem - self._expdur*60*60 < 0.001 and self.delay_finished == 0:
-                    self.delay_finished = 1
-                    self.signal_delayDone_wop.emit()
+#     @pyqtSlot()
+#     def run_count(self):
+#         while self.timer_on == 1:
+#             time_rem = (self._expdur*60*60 + self._delay*60) - (time.time()-self._start_time)
+#             del_rem = (self._delay*60) - (time.time()-self._start_time)
+#             if time_rem < self._maxpg * 60 * 1.5:
+#                 self.signal_ptimeDone.emit()
+#             if time_rem < 0.001:
+#                 self.signal_done.emit()
+#             if self._p_on == 2:
+#                 if time_rem - self._expdur*60*60 < 0.001 and self.delay_finished == 0:
+#                     self.delay_finished = 1
+#                     self.signal_delayDone.emit()
+#             else:
+#                 if time_rem - self._expdur*60*60 < 0.001 and self.delay_finished == 0:
+#                     self.delay_finished = 1
+#                     self.signal_delayDone_wop.emit()
 
-            # If Delay is set
-            if self.delay_finished == 1:
-                tm,ts = np.divmod(int(time_rem), 60)
-                th,tm = np.divmod(tm,60)
-                if len(str(tm)) == 1:
-                    minute = "0" + str(tm)
-                else:
-                    minute = str(tm)    
-                if len(str(ts)) == 1:
-                    second = "0" + str(ts)
-                else:
-                    second = str(ts)
-                time_display = str(th) + ":" + minute + ":" + second
-                self.signal_TimeRem.emit(time_rem, time_display)
+#             # If Delay is set
+#             if self.delay_finished == 1:
+#                 tm,ts = np.divmod(int(time_rem), 60)
+#                 th,tm = np.divmod(tm,60)
+#                 if len(str(tm)) == 1:
+#                     minute = "0" + str(tm)
+#                 else:
+#                     minute = str(tm)    
+#                 if len(str(ts)) == 1:
+#                     second = "0" + str(ts)
+#                 else:
+#                     second = str(ts)
+#                 time_display = str(th) + ":" + minute + ":" + second
+#                 self.signal_TimeRem.emit(time_rem, time_display)
 
-            # If Delay time has ended
-            else:
-                tm,ts = np.divmod(int(del_rem), 60)
-                th,tm = np.divmod(tm,60)
-                if len(str(tm)) == 1:
-                    minute = "0" + str(tm)
-                else:
-                    minute = str(tm)    
-                if len(str(ts)) == 1:
-                    second = "0" + str(ts)
-                else:
-                    second = str(ts)
-                del_display = str(th) + ":" + minute + ":" + second
-                self.signal_TimeRem.emit(time_rem, "D: " + del_display)
+#             # If Delay time has ended
+#             else:
+#                 tm,ts = np.divmod(int(del_rem), 60)
+#                 th,tm = np.divmod(tm,60)
+#                 if len(str(tm)) == 1:
+#                     minute = "0" + str(tm)
+#                 else:
+#                     minute = str(tm)    
+#                 if len(str(ts)) == 1:
+#                     second = "0" + str(ts)
+#                 else:
+#                     second = str(ts)
+#                 del_display = str(th) + ":" + minute + ":" + second
+#                 self.signal_TimeRem.emit(time_rem, "D: " + del_display)
 
-            time.sleep(0.2)
+#             time.sleep(0.2)
 
-class PTime_counter(QObject):
-    """
-    QThread object that run when the open-loop mode has been turned on. This keeps track of
-    time gaps between pulse trains (properties of the pulse trains are set using GUI inputs).
-    Works very similarly to TotTime_counter, but this one runs a separate counter to count down
-    time for the open-loop pulses.
+# class PTime_counter(QObject):
+#     """
+#     QThread object that run when the open-loop mode has been turned on. This keeps track of
+#     time gaps between pulse trains (properties of the pulse trains are set using GUI inputs).
+#     Works very similarly to TotTime_counter, but this one runs a separate counter to count down
+#     time for the open-loop pulses.
 
-    This object is supposed to close some time before the experiment ends (i.e. when the
-    stop_clicked function is run to stop the recording)
-    """
+#     This object is supposed to close some time before the experiment ends (i.e. when the
+#     stop_clicked function is run to stop the recording)
+#     """
 
-    signal_PTimeRem = pyqtSignal(float, str)
-    signal_firePulses = pyqtSignal()
+#     signal_PTimeRem = pyqtSignal(float, str)
+#     signal_firePulses = pyqtSignal()
 
-    def __init__(self, expdur = 0 , puldur = 0, pt_start = 0, minpg = 15, maxpg = 25):
-        super(PTime_counter, self).__init__()
-        self.ptimer_on = 0
-        self._pstart_time = pt_start
-        self._puldur = puldur
-        self._minpg = minpg
-        self._maxpg = maxpg
-        if minpg*60 < puldur:
-            self.pulGap = int(np.random.uniform(puldur, maxpg*60))
-        else:
-            self.pulGap = int(np.random.uniform(minpg, maxpg)*60)
-        self.writer = None
+#     def __init__(self, expdur = 0 , puldur = 0, pt_start = 0, minpg = 15, maxpg = 25):
+#         super(PTime_counter, self).__init__()
+#         self.ptimer_on = 0
+#         self._pstart_time = pt_start
+#         self._puldur = puldur
+#         self._minpg = minpg
+#         self._maxpg = maxpg
+#         if minpg*60 < puldur:
+#             self.pulGap = int(np.random.uniform(puldur, maxpg*60))
+#         else:
+#             self.pulGap = int(np.random.uniform(minpg, maxpg)*60)
+#         self.writer = None
 
-    def run_pcount(self):
-        while self.ptimer_on == 1:
-            ptime_rem = self.pulGap - (time.time()-self._pstart_time)
-            if ptime_rem < 0.001:
-                self.signal_firePulses.emit()
+#     def run_pcount(self):
+#         while self.ptimer_on == 1:
+#             ptime_rem = self.pulGap - (time.time()-self._pstart_time)
+#             if ptime_rem < 0.001:
+#                 self.signal_firePulses.emit()
 
-                ptime_rem = self.pulGap - (time.time()-self._pstart_time)
-                self._pstart_time = time.time()
-                if self._minpg*60 < self._puldur:
-                    self.pulGap = int(np.random.uniform(self._puldur, self._maxpg*60))
-                else:
-                    self.pulGap = int(np.random.uniform(self._minpg, self._maxpg)*60)
+#                 ptime_rem = self.pulGap - (time.time()-self._pstart_time)
+#                 self._pstart_time = time.time()
+#                 if self._minpg*60 < self._puldur:
+#                     self.pulGap = int(np.random.uniform(self._puldur, self._maxpg*60))
+#                 else:
+#                     self.pulGap = int(np.random.uniform(self._minpg, self._maxpg)*60)
 
-            pm,ps = np.divmod(int(ptime_rem), 60)
-            ph,pm = np.divmod(pm,60)
-            if len(str(pm)) == 1:
-                minute = "0" + str(pm)
-            else:
-                minute = str(pm)    
-            if len(str(ps)) == 1:
-                second = "0" + str(ps)
-            else:
-                second = str(ps)
-            ptime_display = str(ph) + ":" + minute + ":" + second
-            self.signal_PTimeRem.emit(ptime_rem, ptime_display)
+#             pm,ps = np.divmod(int(ptime_rem), 60)
+#             ph,pm = np.divmod(pm,60)
+#             if len(str(pm)) == 1:
+#                 minute = "0" + str(pm)
+#             else:
+#                 minute = str(pm)    
+#             if len(str(ps)) == 1:
+#                 second = "0" + str(ps)
+#             else:
+#                 second = str(ps)
+#             ptime_display = str(ph) + ":" + minute + ":" + second
+#             self.signal_PTimeRem.emit(ptime_rem, ptime_display)
 
-            time.sleep(0.2)
+#             time.sleep(0.2)
 
 # class worker_camera(QObject):
 #     """
@@ -452,13 +452,13 @@ class controlBoard(QtWidgets.QMainWindow):
         # self.ui.t_rem.setAlignment(QtCore.Qt.AlignCenter)
         # self.ui.p_rem.setAlignment(QtCore.Qt.AlignCenter)
         # self.ui.pul_enable.setChecked(True)
-        self.ardorrasp = ''
+        # self.ardorrasp = ''
 
         # Setup REM detection stuff
         self.originalDir = os.getcwd()
-        self.running = 0
-        self.SR = 1000
-        self.ui.graphicsPlot.showMaximized()
+        # self.running = 0
+        # self.SR = 1000
+        # self.ui.graphicsPlot.showMaximized()
 
         # Setting core attributes for the Main and QThreads to use as references
 
@@ -521,17 +521,17 @@ class controlBoard(QtWidgets.QMainWindow):
         # Checks that the conditions are met for the program to start
 
         elif self.start_on == 0 and self.preview_on == 0:
-            self.start_on = 1
+            # self.start_on = 1
 
             # Serial communication with the Arduino to change the default values
-            if self.ardorrasp == 'a':
-                QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'H' + str(self.ui.hi.value()) + '\n')))
-                QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'L' + str(self.ui.lo.value()) + '\n')))
-                QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'D' + str(self.ui.pulsedur.value()) + '\n')))
+            # if self.ardorrasp == 'a':
+            #     QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'H' + str(self.ui.hi.value()) + '\n')))
+            #     QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'L' + str(self.ui.lo.value()) + '\n')))
+            #     QTimer.singleShot(100, lambda: self.comPort.write(bytearray(b'D' + str(self.ui.pulsedur.value()) + '\n')))
 
             
             # self.ui.startbutton.setStyleSheet("background-color: red")
-            self.dur_time = int(self.ui.expdur.value()*60*60 + self.ui.delay.value()*60)
+            # self.dur_time = int(self.ui.expdur.value()*60*60 + self.ui.delay.value()*60)
 
             # self.mouselist = []
 
@@ -584,27 +584,27 @@ class controlBoard(QtWidgets.QMainWindow):
             # self.ui.pulseoffbutton.setDisabled(False)
             # self.ui.pul_enable.setDisabled(True)
 
-            time_init = time.localtime()
-            self.timetxt = str(time_init.tm_hour) + ':' + str(time_init.tm_min) + ':' + str(time_init.tm_sec)
+            # time_init = time.localtime()
+            # self.timetxt = str(time_init.tm_hour) + ':' + str(time_init.tm_min) + ':' + str(time_init.tm_sec)
 
             # self.setupNotes()
 
             # Activates GUI features to run during the experiment
-            if self.ui.pul_enable.checkState() == 2:
-                if self.ui.delay.value() != 0:
-                    self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "On Delay"))
+            # if self.ui.pul_enable.checkState() == 2:
+            #     if self.ui.delay.value() != 0:
+            #         self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "On Delay"))
 
 
-            self.timer_thread = QThread(self)
-            self.timer_obj = TotTime_counter(self.ui.maxPG.value(), self.ui.pul_enable.checkState(), 0, self.ui.expdur.value(), self.ui.delay.value())
-            self.timer_obj.moveToThread(self.timer_thread)
-            self.timer_obj.timer_on = 1
-            self.timer_obj.signal_TimeRem.connect(self.update_TimeRem)
-            self.timer_obj.signal_done.connect(self.stop_clicked)
-            self.timer_obj.signal_delayDone.connect(self.initpTime)
-            self.timer_obj.signal_delayDone_wop.connect(self.s_recording)
-            self.timer_obj.signal_ptimeDone.connect(self.endpTime)
-            self.timer_thread.started.connect(self.timer_obj.run_count)
+            # self.timer_thread = QThread(self)
+            # self.timer_obj = TotTime_counter(self.ui.maxPG.value(), self.ui.pul_enable.checkState(), 0, self.ui.expdur.value(), self.ui.delay.value())
+            # self.timer_obj.moveToThread(self.timer_thread)
+            # self.timer_obj.timer_on = 1
+            # self.timer_obj.signal_TimeRem.connect(self.update_TimeRem)
+            # self.timer_obj.signal_done.connect(self.stop_clicked)
+            # self.timer_obj.signal_delayDone.connect(self.initpTime)
+            # self.timer_obj.signal_delayDone_wop.connect(self.s_recording)
+            # self.timer_obj.signal_ptimeDone.connect(self.endpTime)
+            # self.timer_thread.started.connect(self.timer_obj.run_count)
 
 
             if self.cam_connected_LED == 1:
@@ -633,9 +633,9 @@ class controlBoard(QtWidgets.QMainWindow):
                     self.camera_obj.writer2 = self.writer2
 
 
-                start_time = time.time()
-                self.timer_obj._start_time = start_time
-                self.timer_thread.start()
+                # start_time = time.time()
+                # self.timer_obj._start_time = start_time
+                # self.timer_thread.start()
                 self.camera_thread.start()
             
             else:
@@ -1010,13 +1010,13 @@ class controlBoard(QtWidgets.QMainWindow):
     #     self.f.close()
 
 
-    @pyqtSlot(float, str)
-    def update_TimeRem(self, time_rem, new_time):
-        self.time_rem = time_rem
-        if self.timer_obj.timer_on == 1:
-            self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", new_time))
-        else:
-            self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+    # @pyqtSlot(float, str)
+    # def update_TimeRem(self, time_rem, new_time):
+    #     self.time_rem = time_rem
+    #     if self.timer_obj.timer_on == 1:
+    #         self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", new_time))
+    #     else:
+    #         self.ui.t_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
     
     @pyqtSlot()
     def s_recording(self):
@@ -1052,15 +1052,15 @@ class controlBoard(QtWidgets.QMainWindow):
         if self.ardorrasp == 'a':
             self.comPort.write(bytearray(b'S\n'))
             
-        self.ptimer_thread = QThread(self)
-        pstart_time = time.time()
-        self.ptimer_obj = PTime_counter(self.ui.expdur.value(), self.ui.pulsedur.value(), pstart_time, self.ui.minPG.value(), self.ui.maxPG.value())
-        self.ptimer_obj.moveToThread(self.ptimer_thread)
-        self.ptimer_obj.ptimer_on = 1
-        self.ptimer_obj.signal_PTimeRem.connect(self.update_PTimeRem)
-        self.ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
-        self.ptimer_thread.started.connect(self.ptimer_obj.run_pcount)
-        self.ptimer_thread.start()
+        # self.ptimer_thread = QThread(self)
+        # pstart_time = time.time()
+        # self.ptimer_obj = PTime_counter(self.ui.expdur.value(), self.ui.pulsedur.value(), pstart_time, self.ui.minPG.value(), self.ui.maxPG.value())
+        # self.ptimer_obj.moveToThread(self.ptimer_thread)
+        # self.ptimer_obj.ptimer_on = 1
+        # self.ptimer_obj.signal_PTimeRem.connect(self.update_PTimeRem)
+        # self.ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
+        # self.ptimer_thread.started.connect(self.ptimer_obj.run_pcount)
+        # self.ptimer_thread.start()
 
         QTimer.singleShot(100, self.run_spectral)
 
@@ -1118,9 +1118,9 @@ class controlBoard(QtWidgets.QMainWindow):
 
         self.ui.graphicsPlot.clear()
 
-        if self.start_on == 1 and self.preview_on == 0:
-            self.start_on = 0
-            self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
+        # if self.start_on == 1 and self.preview_on == 0:
+            # self.start_on = 0
+            # self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
             self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
             if self.ardorrasp == 'a':
                 self.comPort.write(bytearray(b'E\n'))
@@ -1130,9 +1130,9 @@ class controlBoard(QtWidgets.QMainWindow):
             except AttributeError:
                 pass
 
-            self.timer_obj.timer_on = 0
-            self.timer_thread.quit()
-            self.timer_thread.wait()
+            # self.timer_obj.timer_on = 0
+            # self.timer_thread.quit()
+            # self.timer_thread.wait()
 
             if self.cam_connected_LED == 1:
                 self.camera_obj.camera_on = 0
