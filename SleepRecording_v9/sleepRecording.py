@@ -896,6 +896,12 @@ class main(QtWidgets.QMainWindow):
         timer_thread.started.connect(timer_obj.run_countdown)
         return timer_obj, timer_thread
 
+    def end_countdown(self):
+        self.countdown_obj.countdown_on = False
+        self.countdown_thread.quit()
+        self.countdown_thread.wait()
+        self.update_countdown()
+
     @pyqtSlot(float, str)
     def update_countdown(self, time_rem = 0, time_display = '0'):
         self.time_rem = time_rem
@@ -1001,39 +1007,25 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def start_clicked(self):
-        if self.ard_on or self.rpi_on:
-            self.mouselist, mouselist_empty = self.create_mouselist()
-            
-            if mouselist_empty:
-                self.error_dialog.setText("There are no mice selected")
-                self.error_dialog.show() 
-                return
+        if not self.start_on and not self.preview_on:
+            if self.ard_on or self.rpi_on:
+                self.mouselist, mouselist_empty = self.create_mouselist()
+                if mouselist_empty:
+                    self.error_dialog.setText("There are no mice selected")
+                    self.error_dialog.show() 
+                    return
 
-            if not self.start_on and not self.preview_on:
                 self.start_on = True
                 self.disable_input(True)
                 # self.expdur_sec = (self.ui.expdur.value()*60*60)
                 self.setupNotes()
                 self.disable_comment(False)
                 self.setupProtocol()
-
-                
-
-
-                # Finish arduino commands and rpi commands
-
-
                 self.controls['startbutton'].setStyleSheet("background-color: red")
 
-        else:
-            self.error_dialog.setText("You must connect the controller first!")
-            self.error_dialog.show()
-
-    def end_countdown(self):
-        self.countdown_obj.countdown_on = False
-        self.countdown_thread.quit()
-        self.countdown_thread.wait()
-        self.update_countdown()
+            else:
+                self.error_dialog.setText("You must connect the controller first!")
+                self.error_dialog.show()
 
 
     @pyqtSlot()
