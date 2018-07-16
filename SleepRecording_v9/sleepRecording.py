@@ -245,8 +245,7 @@ class worker_camera(QObject):
     The only ones that worked were for writing from two cameras were MJPG and DIVX). It should work now with using the write codec, but needs to be revised.
     """
 
-    signal_camFrame = pyqtSignal(str, np.ndarray, int)
-    signal_timeStamp = pyqtSignal(str)
+    signal_camFrame = pyqtSignal(str, np.ndarray, str, int)
 
     def __init__(self, preview_or_record, cam, cam_num):
         super(worker_camera, self).__init__()
@@ -279,29 +278,16 @@ class worker_camera(QObject):
                 continue
 
             self.img_timestamp = image.getTimeStamp()
-            # if self.preview_or_record == 'R':
-            #     if len(str(self.img_timestamp.microSeconds)) == 6:
-            #         self.f.write(str(self.img_timestamp.seconds)[-6:] + '.' + str(self.img_timestamp.microSeconds) + '\r\n')
-            #     else:
-            #         self.f.write(str(self.img_timestamp.seconds)[-6:] + '.0' + str(self.img_timestamp.microSeconds) + '\r\n')
+            if len(str(self.img_timestamp.microSeconds)) == 6:
+                self.str_timestamp = str(self.img_timestamp.seconds)[-6:] + '.' + str(self.img_timestamp.microSeconds) + '\r\n'
+            else:
+                self.str_timestamp = str(self.img_timestamp.seconds)[-6:] + '.0' + str(self.img_timestamp.microSeconds) + '\r\n'
 
             imgdat = image.getData()
-            imgnp = np.transpose(np.array(imgdat).reshape(image.getRows(),image.getCols()))
+            imgnp = np.transpose(np.array(imgdat).reshape(image.getRows(), image.getCols()))
             self.prev_timestamp = self.img_timestamp
-            # t1 = 1
-            # else:
-                # t1 = 0
 
-
-            # if self.preview_or_record == 'R':
-            #     if t1 == 1:
-            #         self.writer.write(np.uint8(imgnp))
-            #     if self._cam2 != 0:
-            #         if t2 == 1:
-            #             self.writer2.write(np.uint8(imgnp2))
-            # if t1 == 1:
-
-            self.signal_camFrame.emit(self.preview_or_record, imgnp, self.cam_num)
+            self.signal_camFrame.emit(self.preview_or_record, imgnp, self.str_timestamp, self.cam_num)
             
             time.sleep(0.05)
 
@@ -327,7 +313,7 @@ class main(QtWidgets.QMainWindow):
 
         #### Start from default setup ####
         self.disable_comment(True)
-        self.inputSetup()
+        self.user_inputSetup()
 
     def define_variables(self):
         #### GUI placeholder variables
@@ -355,6 +341,7 @@ class main(QtWidgets.QMainWindow):
         self.cam2_connected = False
         self.start_on = False
         self.preview_on = False
+        self.trigger_on = False
 
         #### GUI input variable dictionaries ####
         ## Protocol ##
@@ -489,7 +476,7 @@ class main(QtWidgets.QMainWindow):
     def connect_signals(self):
         #### Connecting Signals and Slots ####
         for protocol in self.protocols:
-            self.protocols[protocol].clicked.connect(self.inputSetup)
+            self.protocols[protocol].clicked.connect(self.user_inputSetup)
         self.devices['connect_controller'].clicked.connect(self.comm_connect)
         self.devices['connect_c1'].clicked.connect(self.cam1_setup)
         self.devices['connect_c2'].clicked.connect(self.cam2_setup)
@@ -505,10 +492,12 @@ class main(QtWidgets.QMainWindow):
             self.pulseControls[item].setDisabled(disable)
 
     @pyqtSlot()
-    def inputSetup(self):
+    def user_inputSetup(self):
         """Disable settings used for other protocols"""
         if self.protocols['option_default'].isChecked():
-
+            self.parameters['pulsedur'].setDisabled(True)
+            self.parameters['hi'].setDisabled(True)
+            self.parameters['lo'].setDisabled(True)
             self.parameters['maxPG'].setDisabled(True)
             self.parameters['minPG'].setDisabled(True)
             for item in self.thresholds:
@@ -516,13 +505,27 @@ class main(QtWidgets.QMainWindow):
             self.disable_customPulse(False)
 
         elif self.protocols['option_ol'].isChecked():
+            self.parameters['pulsedur'].setDisabled(False)
+            self.parameters['hi'].setDisabled(False)
+            self.parameters['lo'].setDisabled(False)
             self.parameters['maxPG'].setDisabled(False)
             self.parameters['minPG'].setDisabled(False)
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(True)
             self.disable_customPulse(True)
-
+        elif self.protocols['option_cl'].isChecked():
+            self.parameters['pulsedur'].setDisabled(False)
+            self.parameters['hi'].setDisabled(False)
+            self.parameters['lo'].setDisabled(False)
+            self.parameters['maxPG'].setDisabled(True)
+            self.parameters['minPG'].setDisabled(True)
+            for item in self.thresholds:
+                self.thresholds[item].setDisabled(False)
+            self.disable_customPulse(False)
         else:
+            self.parameters['pulsedur'].setDisabled(True)
+            self.parameters['hi'].setDisabled(True)
+            self.parameters['lo'].setDisabled(True)
             self.parameters['maxPG'].setDisabled(True)
             self.parameters['minPG'].setDisabled(True)
             for item in self.thresholds:
@@ -685,8 +688,21 @@ class main(QtWidgets.QMainWindow):
         cam_thread.quit()
         cam_thread.wait()
 
-    @pyqtSlot(str, np.ndarray, int)
-    def process_vid(self, PoR, frame, cam_num):
+    @pyqtSlot(str, np.ndarray, str, int)
+    def process_vid(self, PoR, frame, timestamps, cam_num):
+
+        if PoR == 'R':
+            if cam_num == 1:
+                if self.mouseIDs['m1chk'].checkState() == 2:
+                    self.mkv_writer1.write(np.uint8(frame[0:322,:]))
+                if self.mouseIDs['m2chk'].checkState() == 2:
+                    self.mkv_writer2.write(np.uint8(frame[322:,:]))
+            if cam_num == 2:
+                if self.mouseIDs['m3chk'].checkState() == 2:
+                    self.mkv_writer3.write(np.uint8(frame[0:322,:]))
+                if self.mouseIDs['m4chk'].checkState() == 2:
+                    self.mkv_writer4.write(np.uint8(frame[322:,:]))
+
         if cam_num == 1:
             self.cam1view.setImage(frame)
         if cam_num == 2:
@@ -703,7 +719,8 @@ class main(QtWidgets.QMainWindow):
             self.preview_on = True
 
             for buttons in self.devices:
-                self.devices[buttons].setDisabled(True)
+                if 'led' not in buttons:
+                    self.devices[buttons].setDisabled(True)
             for buttons in self.controls:
                 if 'preview' not in buttons:
                     self.controls[buttons].setDisabled(True)
@@ -732,6 +749,39 @@ class main(QtWidgets.QMainWindow):
                 self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
                 QTimer.singleShot(100, lambda: self.cam2view.clear())
 
+    def start_videoRec(self):
+        self.fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+        if self.cam1_connected:
+            if self.mouseIDs['m1chk'].checkState() == 2:
+                self.mkv_writer1 = cv2.VideoWriter(self.ui.id1.text() + "_cam_1.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
+            if self.mouseIDs['m2chk'].checkState() == 2:
+                self.mkv_writer2 = cv2.VideoWriter(self.ui.id2.text() + "_cam_2.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
+            self.cam_obj1, self.cam_thread1 = self.start_cameraThread(self.cam1, 'R', 1)
+
+        if self.cam2_connected:
+            if self.mouseIDs['m3chk'].checkState() == 2:
+                self.mkv_writer3 = cv2.VideoWriter(self.ui.id3.text() + "_cam_3.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
+            if self.mouseIDs['m4chk'].checkState() == 2:
+                self.mkv_writer4 = cv2.VideoWriter(self.ui.id4.text() + "_cam_4.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
+            self.cam_obj2, self.cam_thread2 = self.start_cameraThread(self.cam2, 'R', 2)
+
+    def end_videoRec(self):
+        if self.cam1_connected:
+            self.stop_cameraThread(self.cam1, self.cam_obj1, self.cam_thread1)
+            if self.mouseIDs['m1chk'].checkState() == 2:
+                self.mkv_writer1.release()
+            if self.mouseIDs['m2chk'].checkState() == 2:
+                self.mkv_writer2.release()
+            QTimer.singleShot(100, lambda: self.cam1view.clear())
+
+        if self.cam2_connected:
+            self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
+            if self.mouseIDs['m3chk'].checkState() == 2:
+                self.mkv_writer3.release()
+            if self.mouseIDs['m4chk'].checkState() == 2:
+                self.mkv_writer4.release()
+            QTimer.singleShot(100, lambda: self.cam2view.clear())
+
    
 
 
@@ -750,17 +800,14 @@ class main(QtWidgets.QMainWindow):
         return mouselist, not bool(mouselist)
 
     def disable_input(self, disable):
-        if disable:
+            for connection in self.devices:
+                if 'led' not in connection:
+                    self.devices[connection].setDisabled(disable)
             for param in self.parameters:
                 self.parameters[param].setDisabled(disable)
             for prop in self.mouseIDs:
                 self.mouseIDs[prop].setDisabled(disable)
-        else:
-            for param in self.parameters:
-                self.parameters[param].setDisabled(disable)
-            for prop in self.mouseIDs:
-                self.mouseIDs[prop].setDisabled(disable)
-            self.inputSetup()
+            self.user_inputSetup()
 
     def getTime(self):
 
@@ -880,6 +927,20 @@ class main(QtWidgets.QMainWindow):
         self.txt.write('#Notes:\t')
         self.txt.close()
 
+    def endNotes(self):
+        self.txt = open(self.todate_full + "_notes.txt", 'a')
+        self.txt.write('\r\n')
+        self.totRec_time = int(self.ui.expdur.value()*60*60) - self.time_rem
+        if self.totRec_time > 0:
+            self.mr,self.srem = np.divmod(self.totRec_time, 60)
+            self.hr,self.mr = np.divmod(self.mr,60)
+            self.txt.write('actual_duration:\t'+ str(int(self.hr)) + 'h:' + str(int(self.mr)) + 'm:' + str(int(self.srem)) + 's')
+            self.txt.close()
+        else:
+            self.txt.write('actual_duration:\t'+ '0h:00m:00s')
+            self.txt.close()
+
+
 
 
 
@@ -902,6 +963,10 @@ class main(QtWidgets.QMainWindow):
         self.countdown_thread.wait()
         self.update_countdown()
 
+        if self.trigger_on:
+            self.trigger_on = False
+            self.comPort.write(bytearray(b'E\n'))
+
     @pyqtSlot(float, str)
     def update_countdown(self, time_rem = 0, time_display = '0'):
         self.time_rem = time_rem
@@ -916,7 +981,7 @@ class main(QtWidgets.QMainWindow):
         ptimer_obj.moveToThread(ptimer_thread)
         ptimer_obj.pcountdown_on = True
         ptimer_obj.signal_pcountdownDisplay.connect(self.update_pcountdown)
-        # ptimer_obj.signal_firePulses.connect(self.arduinoRsignal)
+        ptimer_obj.signal_firePulses.connect(self.ol_firePulses)
         ptimer_thread.started.connect(ptimer_obj.run_pcount)
         ptimer_thread.start()
         return ptimer_obj, ptimer_thread
@@ -927,6 +992,12 @@ class main(QtWidgets.QMainWindow):
         self.pcountdown_thread.wait()
         self.update_pcountdown()
 
+    def ol_firePulses(self):
+        if self.ard_on:
+            self.comPort.write(bytearray(b'R\n'))
+        elif self.rpi_on:
+            # add lines here #
+            pass
 
     @pyqtSlot(float, str)
     def update_pcountdown(self, ptime_rem = 0, ptime_display = '0'):
@@ -964,10 +1035,11 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def beginProtocol(self):
-        if self.protocols['option_default'].isChecked():
-            self.run_default()
-        elif self.protocols['option_ol'].isChecked():
-            self.run_ol()
+        
+        self.run_default()
+
+        if self.protocols['option_ol'].isChecked():
+            self.pcountdown_obj, self.pcountdown_thread = self.setup_pcountdown()
         elif self.protocols['option_cl'].isChecked():
             self.run_cl()
         elif self.protocols['option_remdep'].isChecked():
@@ -976,28 +1048,30 @@ class main(QtWidgets.QMainWindow):
             self.run_cl()
 
     def run_default(self):
-        self.fdajo = 3
+        if self.ard_on:
+            self.comPort.write(bytearray(b'S\n'))
+            self.trigger_on = True
+        elif self.rpi_on:
+            # add lines here for rpi #
+            pass
         
-    def run_ol(self):
-        self.pcountdown_obj, self.pcountdown_thread = self.setup_pcountdown()
         
     # def run_cl(self):
 
     @pyqtSlot()
     def endProtocol(self):
-        if self.protocols['option_default'].isChecked():
-            pass
-        elif self.protocols['option_ol'].isChecked():
-            self.end_ol()
-        elif self.protocols['option_cl'].isChecked():
-            self.end_cl()
-        else:
-            self.end_dep()
 
         self.end_countdown()
 
-    def end_ol(self):
-        self.end_pcountdown()
+        if self.protocols['option_ol'].isChecked():
+            self.end_pcountdown()
+        elif self.protocols['option_cl'].isChecked():
+            self.end_cl()
+        elif self.protocols['option_remdep'].isChecked():
+            self.end_dep()
+        elif self.protocols['option_nremdep'].isChecked():
+            self.end_dep()
+
 
     # def end_cl():
 
@@ -1017,10 +1091,10 @@ class main(QtWidgets.QMainWindow):
 
                 self.start_on = True
                 self.disable_input(True)
-                # self.expdur_sec = (self.ui.expdur.value()*60*60)
-                self.setupNotes()
                 self.disable_comment(False)
+                self.setupNotes()
                 self.setupProtocol()
+                self.start_videoRec()
                 self.controls['startbutton'].setStyleSheet("background-color: red")
 
             else:
@@ -1036,12 +1110,11 @@ class main(QtWidgets.QMainWindow):
             self.graphicsView.clear()
             self.disable_input(False)
             self.disable_comment(True)
+            self.endNotes()
             self.endProtocol()
-
-
+            self.end_videoRec()
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
-
             self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
 
 
@@ -1053,6 +1126,7 @@ class main(QtWidgets.QMainWindow):
     # def puloff_clicked(self):
 
     def disable_comment(self, disable):
+
         self.commentItems['entercomment'].setDisabled(disable)
 
     @pyqtSlot()
@@ -1072,9 +1146,10 @@ class main(QtWidgets.QMainWindow):
 
     def closeEvent(self, *args, **kwargs):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
+        self.stop_clicked()
         self.cams_disconnect()
         self.arduino_disconnect()
-        self.stop_clicked()
+        
 
 
 

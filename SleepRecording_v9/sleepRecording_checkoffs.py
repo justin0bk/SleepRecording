@@ -1031,26 +1031,26 @@ class controlBoard(QtWidgets.QMainWindow):
             except:
                 pass
 
-        if self.ardorrasp == 'a':
-            self.comPort.write(bytearray(b'S\n'))
+        # if self.ardorrasp == 'a':
+        #     self.comPort.write(bytearray(b'S\n'))
 
         QTimer.singleShot(100, self.run_spectral)
 
-    @pyqtSlot()
-    def initpTime(self):
+    # @pyqtSlot()
+    # def initpTime(self):
 
-        if self.cam_connected_LED == 1:
-            self.camera_obj._cam1.writeRegister(0x1508, 0x82000000)
-            self.camera_obj.f = open("cam1_timestamps.txt","w+")
-            try:
-                self.camera_obj._cam2.writeRegister(0x1508, 0x82000000)
-                self.camera_obj.f2 = open("cam2_timestamps.txt","w+")
-            except:
-                pass
-            self.camera_obj.PoR = "R"
+        # if self.cam_connected_LED == 1:
+        #     self.camera_obj._cam1.writeRegister(0x1508, 0x82000000)
+        #     self.camera_obj.f = open("cam1_timestamps.txt","w+")
+        #     try:
+        #         self.camera_obj._cam2.writeRegister(0x1508, 0x82000000)
+        #         self.camera_obj.f2 = open("cam2_timestamps.txt","w+")
+        #     except:
+        #         pass
+        #     self.camera_obj.PoR = "R"
 
-        if self.ardorrasp == 'a':
-            self.comPort.write(bytearray(b'S\n'))
+        # if self.ardorrasp == 'a':
+        #     self.comPort.write(bytearray(b'S\n'))
             
         # self.ptimer_thread = QThread(self)
         # pstart_time = time.time()
@@ -1064,52 +1064,52 @@ class controlBoard(QtWidgets.QMainWindow):
 
         QTimer.singleShot(100, self.run_spectral)
 
-    @pyqtSlot()
-    def endpTime(self):
-        try: 
-            self.ptimer_obj.ptimer_on = 0
-            self.ptimer_thread.quit()
-            self.ptimer_thread.wait()
-            if self.ui.pul_enable.checkState() == 2:
-                self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
-        except AttributeError:
-            pass
+    # @pyqtSlot()
+    # def endpTime(self):
+    #     try: 
+    #         self.ptimer_obj.ptimer_on = 0
+    #         self.ptimer_thread.quit()
+    #         self.ptimer_thread.wait()
+    #         if self.ui.pul_enable.checkState() == 2:
+    #             self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+    #     except AttributeError:
+    #         pass
 
     @pyqtSlot()
     def arduinoRsignal(self):
-        if self.ardorrasp == 'a':
-            self.comPort.write(bytearray(b'R\n'))
+        # if self.ardorrasp == 'a':
+        #     self.comPort.write(bytearray(b'R\n'))
         elif self.ardorrasp == 'r':
             self.s.send('r')
 
-        self.ui.pulseonbutton.setDisabled(True)
-        self.ui.pulseoffbutton.setDisabled(True)
-        self.ui.pulseopen_label.setText(QtCore.QCoreApplication.translate("MainWindow", "Pulse in Use"))
-        self.ui.pul_open.setPixmap(QtGui.QPixmap("green-led-on.png"))
+        # self.ui.pulseonbutton.setDisabled(True)
+        # self.ui.pulseoffbutton.setDisabled(True)
+        # self.ui.pulseopen_label.setText(QtCore.QCoreApplication.translate("MainWindow", "Pulse in Use"))
+        # self.ui.pul_open.setPixmap(QtGui.QPixmap("green-led-on.png"))
         
-        def enableAll():
-            self.ui.pulseonbutton.setDisabled(False)
-            self.ui.pulseoffbutton.setDisabled(False)
-            self.ui.pulseopen_label.setText(QtCore.QCoreApplication.translate("MainWindow", "Pulse Open"))
-            self.ui.pul_open.setPixmap(QtGui.QPixmap("led-red-on.png"))
+        # def enableAll():
+        #     self.ui.pulseonbutton.setDisabled(False)
+        #     self.ui.pulseoffbutton.setDisabled(False)
+        #     self.ui.pulseopen_label.setText(QtCore.QCoreApplication.translate("MainWindow", "Pulse Open"))
+        #     self.ui.pul_open.setPixmap(QtGui.QPixmap("led-red-on.png"))
 
-        QTimer.singleShot(self.ui.pulsedur.value()*1000, enableAll)
-
-
-    @pyqtSlot(float, str)
-    def update_PTimeRem(self, ptime_rem, new_ptime):
-        if self.timer_obj.timer_on == 1 and self.ptimer_obj.ptimer_on == 1:
-            self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", new_ptime))
-        else:
-            self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+        # QTimer.singleShot(self.ui.pulsedur.value()*1000, enableAll)
 
 
-    @pyqtSlot(str, np.ndarray, int)
-    def process_vid(self, PoR, frame, camid):
-        if camid == 1:
-            self.ui.graphicsView.setImage(frame)
-        if camid == 2:
-            self.ui.graphicsView_2.setImage(frame)
+    # @pyqtSlot(float, str)
+    # def update_PTimeRem(self, ptime_rem, new_ptime):
+    #     if self.timer_obj.timer_on == 1 and self.ptimer_obj.ptimer_on == 1:
+    #         self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", new_ptime))
+    #     else:
+    #         self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+
+
+    # @pyqtSlot(str, np.ndarray, int)
+    # def process_vid(self, PoR, frame, camid):
+    #     if camid == 1:
+    #         self.ui.graphicsView.setImage(frame)
+    #     if camid == 2:
+    #         self.ui.graphicsView_2.setImage(frame)
 
 
     @pyqtSlot()
@@ -1121,9 +1121,9 @@ class controlBoard(QtWidgets.QMainWindow):
         # if self.start_on == 1 and self.preview_on == 0:
             # self.start_on = 0
             # self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
-            self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
-            if self.ardorrasp == 'a':
-                self.comPort.write(bytearray(b'E\n'))
+            # self.ui.p_rem.setText(QtCore.QCoreApplication.translate("MainWindow", "STOP"))
+            # if self.ardorrasp == 'a':
+            #     self.comPort.write(bytearray(b'E\n'))
 
             try:
                 self.endpTime()
@@ -1228,12 +1228,12 @@ class controlBoard(QtWidgets.QMainWindow):
 
             
 
-    @pyqtSlot()
-    def disableCustomTime(self):
-        if self.ui.cont.checkState() == 2:
-            self.ui.cpulsedur.setDisabled(True)
-        else:
-            self.ui.cpulsedur.setDisabled(False)
+    # @pyqtSlot()
+    # def disableCustomTime(self):
+    #     if self.ui.cont.checkState() == 2:
+    #         self.ui.cpulsedur.setDisabled(True)
+    #     else:
+    #         self.ui.cpulsedur.setDisabled(False)
 
     # @pyqtSlot()
     # def disablePulses(self):
