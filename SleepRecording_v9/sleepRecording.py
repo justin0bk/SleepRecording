@@ -29,6 +29,7 @@ from run_GUI_v9 import Ui_MainWindow
 import socket
 import numpy as np
 import scipy
+import scipy.signal
 import PyCapture2
 import cv2
 import serial
@@ -152,6 +153,10 @@ class mouse_plotObj:
         self.num_iter = 0
         self.bern = np.random.binomial(1, 0.50 ,1000)
 
+        self.buffer_e = np.ndarray(0)
+        self.buffer_m = np.ndarray(0)
+        self.EEG_2_5 = np.ndarray(0)
+        self.EMG_2_5 = np.ndarray(0)
         self.EEG_5 = np.ndarray(0)
         self.EMG_5 = np.ndarray(0)
         self.spectro_bufE = np.zeros((240,501))
@@ -184,13 +189,11 @@ class mouse_plotObj:
             self.eeg_idx = self.channels.find('E') + step
             self.emg_idx = self.channels.find('M') + step
 
-
-
-        self.delta_h = np.zeros(240)
-        self.mu_h = np.zeros(240)
-        self.theta_h = np.zeros(240)
-        self.rem_h = np.zeros(240)
-        self.th_delta_h = np.zeros(240)
+        self.delta_h = list(np.zeros(240))
+        self.mu_h = list(np.zeros(240))
+        self.theta_h = list(np.zeros(240))
+        self.rem_h = list(np.zeros(240))
+        self.th_delta_h = list(np.zeros(240))
 
         self.image_fft = pg.ImageItem()
 
@@ -377,18 +380,10 @@ class worker_camera(QObject):
             time.sleep(0.06)
 
 class worker_buffer(QObject):
-    """
-    Thread object that retrieves data as it gets written from the DAQ board. Each loop cuts the
-    data into 2.5 second bits (sampling rate runs on 1000 SPS), then sends this to a function to calculate
-    spectrograms and to plot on another window. There is also a relay function that takes the data and identifies the 
-    signal for each mouse. 
 
-    Perhaps np.append is not the most efficient function to use here? 
-    """
+    signal_new5sec = pyqtSignal()
 
-    signal_new5sec = pyqtSignal(dict, dict)
-
-    def __init__(self, od, eidx, midx, switch = 0):
+    def __init__(self, od, mouseObjs, switch = 0):
         super(worker_buffer, self).__init__()
         self.odir = od
         self.fid = open(self.odir + '/amplifier.dat', 'rb')
@@ -396,16 +391,10 @@ class worker_buffer(QObject):
         self.switch = switch
         self.new_data = np.fromfile(self.fid, dtype='int16')
         self.new_time = np.fromfile(self.tid, dtype='int32')
-        self.eidx = eidx
-        self.midx = midx
+        self.mouseObjs = mouseObjs
         self.numchans = 0
-        for mouse in self.eidx:
-            self.numchans += 4
-
-
-        self.buffer_e = {k: np.ndarray(0) for k in eidx}
-        self.tmp_key = self.buffer_e.keys()[0]
-        self.buffer_m = {k: np.ndarray(0) for k in midx}
+        for mouse in mouseObjs:
+            self.numchans += len(mouseObjs[mouse].channels)
 
 
         # we need: eeg_idx, emg_idx, new5_e, new5_m, 
@@ -415,21 +404,19 @@ class worker_buffer(QObject):
             self.new_data = np.fromfile(self.fid, dtype='int16')
 
             if len(self.new_data) > 1:
-                for mouse in self.eidx:
-                    self.buffer_e[mouse] = np.append(self.buffer_e[mouse], self.new_data[self.eidx[mouse]::self.numchans])
-                    self.buffer_m[mouse] = np.append(self.buffer_m[mouse], self.new_data[self.midx[mouse]::self.numchans])
+                for mouse in self.mouseObjs:
+                    mouse_eidx = self.mouseObjs[mouse].eeg_idx
+                    mouse_midx = self.mouseObjs[mouse].emg_idx
+                    self.mouseObjs[mouse].buffer_e = np.append(self.mouseObjs[mouse].buffer_e, self.new_data[mouse_eidx::self.numchans])
+                    self.mouseObjs[mouse].buffer_m = np.append(self.mouseObjs[mouse].buffer_m, self.new_data[mouse_midx::self.numchans])
 
-                if len(self.buffer_e[self.tmp_key]) >= 2500:
-                    buffer_emitE = {}
-                    buffer_emitM = {}
-                    for mouse in self.eidx:
-                        buffer_emitE[mouse] = self.buffer_e[mouse][:2500]
-                        buffer_emitM[mouse] = self.buffer_m[mouse][:2500]
-                    self.signal_new5sec.emit(buffer_emitE, buffer_emitM)
-                    
-                    for mouse in self.eidx:
-                        self.buffer_e[mouse] = self.buffer_e[mouse][2500:]
-                        self.buffer_m[mouse] = self.buffer_m[mouse][2500:]
+                if len(self.mouseObjs[mouse].buffer_e) >= 2500:
+                    for mouse in self.mouseObjs:
+                        self.mouseObjs[mouse].EEG_2_5 = self.mouseObjs[mouse].buffer_e[:2500]
+                        self.mouseObjs[mouse].buffer_e = self.mouseObjs[mouse].buffer_e[2500:]
+                        self.mouseObjs[mouse].EMG_2_5 = self.mouseObjs[mouse].buffer_m[:2500]
+                        self.mouseObjs[mouse].buffer_m = self.mouseObjs[mouse].buffer_m[2500:]
+                    self.signal_new5sec.emit()
 
             time.sleep(0.01)
 
@@ -483,6 +470,7 @@ class main(QtWidgets.QMainWindow):
         self.start_on = False
         self.preview_on = False
         self.trigger_on = False
+        self.plotter_on = False
         self.places = [False, False, False, False]
 
         #### Range variables for plotting
@@ -700,7 +688,7 @@ class main(QtWidgets.QMainWindow):
             if params['buf_dir'] == []:
                 self.buf_dir = str(QFileDialog.getExistingDirectory(self, "Select the directory containing DAT files"))
             else:
-                self.buf_dir = params['buf_dir']
+                self.buf_dir = params['buf_dir'][0]
             if params['remtxt_dir'] == []:
                 self.remtxt_dir = str(QFileDialog.getExistingDirectory(self, "Select path to mouse_rem.txt files"))
             else:
@@ -766,6 +754,7 @@ class main(QtWidgets.QMainWindow):
         self.user_inputSetup()
 
     def save_setup(self, name):
+        print(name)
         if name:
             if 'txt' in os.path.basename(name):
                 os.remove(name)
@@ -1371,26 +1360,6 @@ class main(QtWidgets.QMainWindow):
         
     # def run_cl(self):
 
-    @pyqtSlot()
-    def endProtocol(self):
-
-        self.end_countdown()
-
-        if self.protocols['option_ol'].isChecked():
-            self.end_pcountdown()
-        elif self.protocols['option_cl'].isChecked():
-            self.end_cl()
-        elif self.protocols['option_remdep'].isChecked():
-            self.end_dep()
-        elif self.protocols['option_nremdep'].isChecked():
-            self.end_dep()
-
-
-    # def end_cl():
-
-
-    def setupPlots(self):
-
         # rem state on/off
         # if self.ardorrasp == 'r':
         #     self.s.send('START')
@@ -1418,7 +1387,26 @@ class main(QtWidgets.QMainWindow):
         #         time.sleep(0.1)
         #         self.s.send('nn')
 
-        
+    @pyqtSlot()
+    def endProtocol(self):
+
+        self.end_countdown()
+
+        if self.protocols['option_ol'].isChecked():
+            self.end_pcountdown()
+        elif self.protocols['option_cl'].isChecked():
+            self.end_cl()
+        elif self.protocols['option_remdep'].isChecked():
+            self.end_dep()
+        elif self.protocols['option_nremdep'].isChecked():
+            self.end_dep()
+
+
+    # def end_cl():
+
+
+    def setupPlots(self):
+     
         self.mice_onPlot = {}
         self.plotObjs = {}
         for m_idx in range(len(self.mouselist)):
@@ -1426,12 +1414,12 @@ class main(QtWidgets.QMainWindow):
             pos = m_idx + 1
             m_num = 'm' + str(pos)
             try:
-                params = load_params(ppath, ID + '_rem.txt')
+                params = load_params(self.remtxt_dir, ID + '_rem.txt')
             except IOError:
                 print('REM txt does not exist for the mouse ' + ID +'. Continuing with default values...')
                 params = {}
             except NameError:
-                print('Path not set appropriately. Continuing...')
+                print('No threshold found. Continuing...')
                 params = {}
 
             self.mice_onPlot[m_num] = mouse_plotObj(ID, pos, params)
@@ -1447,166 +1435,169 @@ class main(QtWidgets.QMainWindow):
             spec_plot.addItem(self.mice_onPlot[m_num].image_fft)
             ax = spec_plot.getAxis(name='left')
             ax.setTicks([[(0, '0'), (5, '5'), (10, '10'), (15, '15'), (20, '20')]])
-            spec_plot.setYRange(0, 20, padding = 0.5)
+            spec_plot.setYRange(0, 20)
 
             for plot in self.plotObjs[m_num]:
                 plot.setMouseEnabled(x = False)
 
-        self.beginPlots()
-
+        QTimer.singleShot(2000, lambda: self.beginPlots())  
 
     def beginPlots(self):
 
-        self.folderlist = glob.glob(self.buf_dir + '/*')
-        self.datdir = max(self.folderlist, key=os.path.getctime)
+        try:
+            self.folderlist = glob.glob(self.buf_dir + '/*')
+            self.datdir = max(self.folderlist, key=os.path.getctime)
+        
+        except:
+            self.error_dialog.setText("Buffer file cannot be found. Load a proper setting for ploting.")
+            self.error_dialog.show()
+            return
 
         self.updater_thread = QThread(self)
-        self.data_getter = worker_buffer(self.datdir, self.eeg_idx, self.emg_idx, switch = 1)
+        self.data_getter = worker_buffer(self.datdir, self.mice_onPlot, switch = 1)
         self.data_getter.moveToThread(self.updater_thread)
         self.data_getter.signal_new5sec.connect(self.update_master)
         self.updater_thread.started.connect(self.data_getter.run_it)
         self.updater_thread.start()
-
+        self.plotter_on = True
+        
     def endPlots(self):
 
-        self.data_getter.switch = 0
-        self.data_getter.fid.close()
-        self.data_getter.tid.close()
-        self.updater_thread.quit()
-        self.updater_thread.wait()
+        if self.plotter_on:
+            self.plotter_on = False
+            self.data_getter.switch = 0
+            self.data_getter.fid.close()
+            self.data_getter.tid.close()
+            self.updater_thread.quit()
+            self.updater_thread.wait()
 
 
-    @pyqtSlot(dict, dict)
-    def update_master(self, new_deeg, new_demg):
-        for mouse in self.mouselist:
-            self.EEG_5[mouse] = np.append(self.EEG_5[mouse], new_deeg[mouse])
-            self.EMG_5[mouse] = np.append(self.EMG_5[mouse], new_demg[mouse])
-            try:
-                self.update_spec(mouse, self.EEG_5[mouse], self.EMG_5[mouse])
-            except TypeError:
-                print('four inputs')
+    @pyqtSlot()
+    def update_master(self):
+        for mouse in self.mice_onPlot:
+            self.mice_onPlot[mouse].EEG_5 = np.append(self.mice_onPlot[mouse].EEG_5, self.mice_onPlot[mouse].EEG_2_5)
+            self.mice_onPlot[mouse].EMG_5 = np.append(self.mice_onPlot[mouse].EMG_5, self.mice_onPlot[mouse].EMG_2_5)
+            
+            self.update_spec(self.mice_onPlot[mouse], mouse)
 
-            if len(self.EEG_5[mouse]) >= 5000:
-                self.EEG_5[mouse] = new_deeg[mouse]
-                self.EMG_5[mouse] = new_demg[mouse]
+            if len(self.mice_onPlot[mouse].EEG_5) >= 5000:
+                self.mice_onPlot[mouse].EEG_5 = self.mice_onPlot[mouse].EEG_2_5
+                self.mice_onPlot[mouse].EMG_5 = self.mice_onPlot[mouse].EMG_2_5
 
-    def update_spec(self, mousename, data_eeg, data_emg):
+    def update_spec(self, mouseObj, m_idx): #mousename, data_eeg, data_emg):
 
-        if len(data_eeg) >= 5000:
-            self.p_e, self.p_m, self.f_e, self.f_m = recursive_spectrogram(data_eeg, data_emg)
+        if len(mouseObj.EEG_5) >= 5000:
+            p_e, p_m, f_e, f_m = recursive_spectrogram(mouseObj.EEG_5, mouseObj.EMG_5)
 
-            for plots in self.plotObjs[mousename]:
+            for plots in self.plotObjs[m_idx]:
                 plots.clear()
 
-            self.SE = self.alpha*self.p_e + (1-self.alpha) * self.spectro_buf1[mousename][-1,:]
-            self.SM = self.alpha*self.p_m + (1-self.alpha) * self.spectro_buf2[mousename][-1,:]
+            SE = self.alpha*p_e + (1-self.alpha) * mouseObj.spectro_bufE[-1,:]
+            SM = self.alpha*p_m + (1-self.alpha) * mouseObj.spectro_bufM[-1,:]
 
             # power calculation
 
-            i_delta = np.where((self.f_e >= self.r_delta[0]) & (self.f_e <= self.r_delta[1]))[0]
-            i_theta = np.where((self.f_e >= self.r_theta[0]) & (self.f_e <= self.r_theta[1]))[0]
-            i_mu = np.where((self.f_m >= self.r_mu[0]) & (self.f_m <= self.r_mu[1]))[0]
+            i_delta = np.where((f_e >= self.r_delta[0]) & (f_e <= self.r_delta[1]))[0]
+            i_theta = np.where((f_e >= self.r_theta[0]) & (f_e <= self.r_theta[1]))[0]
+            i_mu = np.where((f_m >= self.r_mu[0]) & (f_m <= self.r_mu[1]))[0]
             
-            pow_delta = np.sum(self.SE[i_delta])
-            self.delta_h[mousename].append(pow_delta)
-            self.delta_h[mousename] = self.delta_h[mousename][-240:]
-            self.plotObjs[mousename][0].plot(self.delta_h[mousename])
-            self.plotObjs[mousename][0].plot(self.thr_deltap[mousename], pen = pg.mkPen('r'))
+            pow_delta = np.sum(SE[i_delta])
+            mouseObj.delta_h.append(pow_delta)
+            mouseObj.delta_h = mouseObj.delta_h[-240:]
+            self.plotObjs[m_idx][0].plot(mouseObj.delta_h)
+            self.plotObjs[m_idx][0].plot(mouseObj.thr_deltap, pen = pg.mkPen('r'))
 
-            pow_theta = np.sum(self.SE[i_theta])
-            self.theta_h[mousename].append(pow_theta)
-            self.theta_h[mousename] = self.theta_h[mousename][-240:]
+            pow_theta = np.sum(SE[i_theta])
+            mouseObj.theta_h.append(pow_theta)
+            mouseObj.theta_h = mouseObj.theta_h[-240:]
 
             th_delta = np.divide(pow_theta, pow_delta)
-            self.th_delta_h[mousename].append(th_delta)
-            self.th_delta_h[mousename] = self.th_delta_h[mousename][-240:]
-            self.plotObjs[mousename][1].plot(self.th_delta_h[mousename])
-            self.plotObjs[mousename][1].plot(self.thr_th_delta1p[mousename], pen = pg.mkPen('r'))
-            self.plotObjs[mousename][1].plot(self.thr_th_delta2p[mousename], pen = pg.mkPen('b'))
+            mouseObj.th_delta_h.append(th_delta)
+            mouseObj.th_delta_h = mouseObj.th_delta_h[-240:]
+            self.plotObjs[m_idx][1].plot(mouseObj.th_delta_h)
+            self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta1p, pen = pg.mkPen('r'))
+            self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta2p, pen = pg.mkPen('b'))
 
-            pow_mu = np.sum(self.SM[i_mu])
-            self.pow_muh[mousename].append(pow_mu)
-            self.mu_h[mousename].append(pow_mu)
-            self.mu_h[mousename] = self.mu_h[mousename][-240:]
-            self.plotObjs[mousename][2].plot(self.mu_h[mousename])
-            self.plotObjs[mousename][2].plot(self.thr_mup[mousename], pen = pg.mkPen('r'))
+            pow_mu = np.sum(SM[i_mu])
+            mouseObj.pow_muh.append(pow_mu)
+            mouseObj.mu_h.append(pow_mu)
+            mouseObj.mu_h = mouseObj.mu_h[-240:]
+            self.plotObjs[m_idx][2].plot(mouseObj.mu_h)
+            self.plotObjs[m_idx][2].plot(mouseObj.thr_mup, pen = pg.mkPen('r'))
 
 
             # determine rem state
 
-            if (self.prem[mousename] == 0 and pow_delta < self.thr_delta[mousename] and pow_mu < self.thr_mu[mousename]):
+            if (mouseObj.prem == 0 and pow_delta < mouseObj.thr_delta and pow_mu < mouseObj.thr_mu):
             ### could be REM
             
-                if (th_delta > self.thr_th_delta1[mousename]):
+                if (th_delta > mouseObj.thr_th_delta1):
                 ### we are potentially entering REM
-                    if (self.past_len[mousename] < self.num_iter[mousename]):
-                        past_len = self.past_len[mousename]
+                    if (mouseObj.past_len < mouseObj.num_iter):
+                        past_len = mouseObj.past_len
                     else:
-                        past_len = self.num_iter[mousename]
+                        past_len = mouseObj.num_iter
 
                     # count the percentage of brainstate bins with elevated EMG power
                     if past_len != 0:
-                        c_mu = np.sum(np.where(self.pow_muh[mousename][(past_len*-1):]>self.thr_mu[mousename])[0] ) / past_len
+                        c_mu = np.sum(np.where(mouseObj.pow_muh[(past_len*-1):]>mouseObj.thr_mu)[0] ) / past_len
 
                         if c_mu < 0.2: # 0.2 = past_mu previously
                         ### we are in REM
-                            self.prem[mousename] = 1  # turn laser on
+                            mouseObj.prem = 1  # turn laser on
 
             # We are currently in REM; do we stay there?
-            if self.prem[mousename] == 1:
+            if mouseObj.prem == 1:
                 ### REM continues, if theta/delta is larger than soft threshold and if there's
                 ### no EMG activation
-                if ((th_delta > self.thr_th_delta2[mousename]) and (pow_mu < self.thr_mu[mousename])):
-                    self.prem[mousename] = 1
+                if ((th_delta > mouseObj.thr_th_delta2) and (pow_mu < mouseObj.thr_mu)):
+                    mouseObj.prem = 1
                 else:
-                    self.prem[mousename] = 0 #turn laser off
-                    self.bern_counter[mousename] += 1
+                    mouseObj.prem = 0 #turn laser off
+                    mouseObj.bern_counter += 1
+
+            #  This section needs to be implemented as a part of cl protocol
+            # try:
+            #     if mouseObj.prem == 1:
+            #         try:
+            #             if self.ui.cl_enable.checkState() == 2:
+            #                 if self.bern_rem[self.bern_counter] == 1:
+            #                     self.s.send(mousename + '2')
+            #                     self.prem += 1 # bump up prem to 2 if actually on vs. 1 when it is randomly off
+            #                 else:
+            #                     self.s.send(mousename + '1')
+            #         except KeyError:
+            #             print('laser on at 100%' + ' rate')
+            #             if self.ui.cl_enable.checkState() == 2:
+            #                 self.s.send(mousename + '2')
+            #     else:
+            #         if self.ui.cl_enable.checkState() == 2:
+            #             self.s.send(mousename + '0')
+            # except socket.error:
+            #     print('error')
 
 
-            try:
-                if self.prem[mousename] == 1:
-                    try:
-                        if self.ui.cl_enable.checkState() == 2:
-                            if self.bern_rem[mousename][self.bern_counter[mousename]] == 1:
-                                self.s.send(mousename + '2')
-                                self.prem[mousename] += 1 # bump up prem to 2 if actually on vs. 1 when it is randomly off
-                            else:
-                                self.s.send(mousename + '1')
-                    except KeyError:
-                        print('laser on at 100%' + ' rate')
-                        if self.ui.cl_enable.checkState() == 2:
-                            self.s.send(mousename + '2')
-                else:
-                    if self.ui.cl_enable.checkState() == 2:
-                        self.s.send(mousename + '0')
-            except socket.error:
-                print('error')
+            # self.rem_hist.append(self.prem)
+            mouseObj.rem_h.append(mouseObj.prem)
+            mouseObj.rem_h = mouseObj.rem_h[-240:]
+            self.plotObjs[m_idx][1].plot(mouseObj.rem_h, pen = pg.mkPen('g'))
 
-            self.rem_hist[mousename].append(self.prem[mousename])
-            self.rem_h[mousename].append(self.prem[mousename])
-            self.rem_h[mousename] = self.rem_h[mousename][-240:]
-            self.plotObjs[mousename][1].plot(self.rem_h[mousename], pen = pg.mkPen('g'))
-
-            if self.prem[mousename] == 2:
-                self.prem[mousename] = 1
+            # if self.prem == 2:
+            #     self.prem = 1
 
             # Buffer add
 
-            self.num_iter[mousename] += 1
+            mouseObj.num_iter += 1
 
 
-            self.spectro_buf1[mousename] = np.vstack([self.spectro_buf1[mousename], [self.SE]])[1:,:]
-            self.spectro_buf2[mousename] = np.vstack([self.spectro_buf2[mousename], [self.SM]])[1:,:]
+            mouseObj.spectro_bufE = np.vstack([mouseObj.spectro_bufE, [SE]])[1:,:]
+            mouseObj.spectro_bufM = np.vstack([mouseObj.spectro_bufM, [SM]])[1:,:]
 
-            x = pg.makeARGB(self.spectro_buf1[mousename], levels = [0,45000], lut = self.lut)[0]
-            y = pg.makeARGB(self.spectro_buf2[mousename], levels = [0,45000], lut = self.lut)[0]
+            x = pg.makeARGB(mouseObj.spectro_bufE, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
+            y = pg.makeARGB(mouseObj.spectro_bufM, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
 
-            self.plotObjs[mousename][3].addItem(self.image_fft1[mousename])
-            # self.P6.addItem(self.image_fft2)
-            self.image_fft1[mousename].setImage(x)
-            # self.image_fft2.setImage(y)
-
-
+            self.plotObjs[m_idx][4].addItem(mouseObj.image_fft)
+            mouseObj.image_fft.setImage(x)
 
 
 
@@ -1626,6 +1617,7 @@ class main(QtWidgets.QMainWindow):
                 self.setupNotes()
                 self.setupProtocol()
                 self.start_videoRec()
+                self.setupPlots()
                 self.controls['startbutton'].setStyleSheet("background-color: red")
 
             else:
@@ -1644,6 +1636,7 @@ class main(QtWidgets.QMainWindow):
             self.endNotes()
             self.endProtocol()
             self.end_videoRec()
+            self.endPlots()
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
             self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
