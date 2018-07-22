@@ -155,6 +155,7 @@ class mouse_plotObj:
 
         self.buffer_e = np.ndarray(0)
         self.buffer_m = np.ndarray(0)
+        self.rawtrace = list(np.zeros(5000))
         self.EEG_2_5 = np.ndarray(0)
         self.EMG_2_5 = np.ndarray(0)
         self.EEG_5 = np.ndarray(0)
@@ -381,7 +382,8 @@ class worker_camera(QObject):
 
 class worker_buffer(QObject):
 
-    signal_new5sec = pyqtSignal()
+    signal_new5sec = pyqtSignal(object, str)
+    signal_EEGraw = pyqtSignal(list, str)
 
     def __init__(self, od, mouseObjs, switch = 0):
         super(worker_buffer, self).__init__()
@@ -393,8 +395,103 @@ class worker_buffer(QObject):
         self.new_time = np.fromfile(self.tid, dtype='int32')
         self.mouseObjs = mouseObjs
         self.numchans = 0
+        self.alpha = 0.3
+        self.r_delta = [0.5, 4]
+        self.r_theta = [5,12]
+        self.r_mu = [300, 500]
         for mouse in mouseObjs:
             self.numchans += len(mouseObjs[mouse].channels)
+
+    def update_spec(self, mouseObj, m_idx):
+        if len(mouseObj.EEG_5) >= 5000:
+            p_e, p_m, f_e, f_m = recursive_spectrogram(mouseObj.EEG_5, mouseObj.EMG_5)
+
+            SE = self.alpha*p_e + (1-self.alpha) * mouseObj.spectro_bufE[-1,:]
+            SM = self.alpha*p_m + (1-self.alpha) * mouseObj.spectro_bufM[-1,:]
+
+            # power calculation
+
+            i_delta = np.where((f_e >= self.r_delta[0]) & (f_e <= self.r_delta[1]))[0]
+            i_theta = np.where((f_e >= self.r_theta[0]) & (f_e <= self.r_theta[1]))[0]
+            i_mu = np.where((f_m >= self.r_mu[0]) & (f_m <= self.r_mu[1]))[0]
+            
+            pow_delta = np.sum(SE[i_delta])
+            mouseObj.delta_h.append(pow_delta)
+            mouseObj.delta_h = mouseObj.delta_h[-240:]
+
+            pow_theta = np.sum(SE[i_theta])
+            mouseObj.theta_h.append(pow_theta)
+            mouseObj.theta_h = mouseObj.theta_h[-240:]
+
+            th_delta = np.divide(pow_theta, pow_delta)
+            mouseObj.th_delta_h.append(th_delta)
+            mouseObj.th_delta_h = mouseObj.th_delta_h[-240:]
+
+
+            pow_mu = np.sum(SM[i_mu])
+            mouseObj.pow_muh.append(pow_mu)
+            mouseObj.mu_h.append(pow_mu)
+            mouseObj.mu_h = mouseObj.mu_h[-240:]
+
+
+            # determine rem state
+
+            if (mouseObj.prem == 0 and pow_delta < mouseObj.thr_delta and pow_mu < mouseObj.thr_mu):
+            ### could be REM
+            
+                if (th_delta > mouseObj.thr_th_delta1):
+                ### we are potentially entering REM
+                    if (mouseObj.past_len < mouseObj.num_iter):
+                        past_len = mouseObj.past_len
+                    else:
+                        past_len = mouseObj.num_iter
+
+                    # count the percentage of brainstate bins with elevated EMG power
+                    if past_len != 0:
+                        c_mu = np.sum(np.where(mouseObj.pow_muh[(past_len*-1):]>mouseObj.thr_mu)[0] ) / past_len
+
+                        if c_mu < 0.2: # 0.2 = past_mu previously
+                        ### we are in REM
+                            mouseObj.prem = 1  # turn laser on
+
+            # We are currently in REM; do we stay there?
+            if mouseObj.prem == 1:
+                ### REM continues, if theta/delta is larger than soft threshold and if there's
+                ### no EMG activation
+                if ((th_delta > mouseObj.thr_th_delta2) and (pow_mu < mouseObj.thr_mu)):
+                    mouseObj.prem = 1
+                else:
+                    mouseObj.prem = 0 #turn laser off
+                    mouseObj.bern_counter += 1
+
+            # self.rem_hist.append(self.prem)
+            mouseObj.rem_h.append(mouseObj.prem)
+            mouseObj.rem_h = mouseObj.rem_h[-240:]
+            
+
+            # if self.prem == 2:
+            #     self.prem = 1
+
+            # Buffer add
+
+            mouseObj.num_iter += 1
+
+            mouseObj.spectro_bufE = np.vstack([mouseObj.spectro_bufE, [SE]])[1:,:]
+            mouseObj.spectro_bufM = np.vstack([mouseObj.spectro_bufM, [SM]])[1:,:]
+
+            self.signal_new5sec.emit(mouseObj, m_idx)
+
+
+    def rt_spectrogram(self, mouseObj, m_idx):
+        mouseObj.EEG_5 = np.append(mouseObj.EEG_5, mouseObj.EEG_2_5)
+        mouseObj.EMG_5 = np.append(mouseObj.EMG_5, mouseObj.EMG_2_5)
+        
+        self.update_spec(mouseObj, m_idx)
+
+        if len(mouseObj.EEG_5) >= 5000:
+            mouseObj.EEG_5 = mouseObj.EEG_2_5
+            mouseObj.EMG_5 = mouseObj.EMG_2_5
+        
 
 
         # we need: eeg_idx, emg_idx, new5_e, new5_m, 
@@ -409,6 +506,7 @@ class worker_buffer(QObject):
                     mouse_midx = self.mouseObjs[mouse].emg_idx
                     self.mouseObjs[mouse].buffer_e = np.append(self.mouseObjs[mouse].buffer_e, self.new_data[mouse_eidx::self.numchans])
                     self.mouseObjs[mouse].buffer_m = np.append(self.mouseObjs[mouse].buffer_m, self.new_data[mouse_midx::self.numchans])
+                    self.signal_EEGraw.emit(list(self.new_data[mouse_eidx::self.numchans]), mouse)
 
                 if len(self.mouseObjs[mouse].buffer_e) >= 2500:
                     for mouse in self.mouseObjs:
@@ -416,7 +514,7 @@ class worker_buffer(QObject):
                         self.mouseObjs[mouse].buffer_e = self.mouseObjs[mouse].buffer_e[2500:]
                         self.mouseObjs[mouse].EMG_2_5 = self.mouseObjs[mouse].buffer_m[:2500]
                         self.mouseObjs[mouse].buffer_m = self.mouseObjs[mouse].buffer_m[2500:]
-                    self.signal_new5sec.emit()
+                        self.rt_spectrogram(self.mouseObjs[mouse], mouse)
 
             time.sleep(0.01)
 
@@ -474,10 +572,6 @@ class main(QtWidgets.QMainWindow):
         self.places = [False, False, False, False]
 
         #### Range variables for plotting
-        self.r_delta = [0.5, 4]
-        self.r_theta = [5,12]
-        self.r_mu = [300, 500]
-        self.alpha = 0.3
         self.pos = np.array([0., 0.05, .2, .4, .6, .9])
         self.color = np.array([[0, 0, 0, 255], [0,0,255,255], [0,255,0,255], [255,255,0, 255], (255,165,0,255), (255,0,0, 255)], dtype=np.ubyte)
         self.cmap = pg.ColorMap(self.pos, self.color)
@@ -692,69 +786,73 @@ class main(QtWidgets.QMainWindow):
             if params['remtxt_dir'] == []:
                 self.remtxt_dir = str(QFileDialog.getExistingDirectory(self, "Select path to mouse_rem.txt files"))
             else:
-                self.remtxt_dir = params['remtxt_dir']
+                self.remtxt_dir = params['remtxt_dir'][0]
         except:
             self.error_dialog.setText("Load unsuccesful: There is a problem setting up the directory.")
             self.error_dialog.show()
 
-        self.protocols[params['protocol'][0]].setChecked(True)
+        try:
+            self.protocols[params['protocol'][0]].setChecked(True)
 
-        self.parameters['sr'].setProperty("value", params['sr'][0])
-        self.parameters['delay'].setProperty("value", params['delay'][0])
-        self.parameters['expdur'].setProperty("value", params['expdur'][0])
-        self.parameters['pulsedur'].setProperty("value", params['pulsedur'][0])
-        self.parameters['hi'].setProperty("value", params['hi'][0])
-        self.parameters['lo'].setProperty("value", params['lo'][0])
-        self.parameters['maxPG'].setProperty("value", params['maxPG'][0])
-        self.parameters['minPG'].setProperty("value", params['minPG'][0])
+            self.parameters['sr'].setProperty("value", params['sr'][0])
+            self.parameters['delay'].setProperty("value", params['delay'][0])
+            self.parameters['expdur'].setProperty("value", params['expdur'][0])
+            self.parameters['pulsedur'].setProperty("value", params['pulsedur'][0])
+            self.parameters['hi'].setProperty("value", params['hi'][0])
+            self.parameters['lo'].setProperty("value", params['lo'][0])
+            self.parameters['maxPG'].setProperty("value", params['maxPG'][0])
+            self.parameters['minPG'].setProperty("value", params['minPG'][0])
 
-        self.mouseIDs['m1chk'].setChecked(params['m1chk'][0])
-        self.mouseIDs['m2chk'].setChecked(params['m2chk'][0])
-        self.mouseIDs['m3chk'].setChecked(params['m3chk'][0])
-        self.mouseIDs['m4chk'].setChecked(params['m4chk'][0])
+            self.mouseIDs['m1chk'].setChecked(params['m1chk'][0])
+            self.mouseIDs['m2chk'].setChecked(params['m2chk'][0])
+            self.mouseIDs['m3chk'].setChecked(params['m3chk'][0])
+            self.mouseIDs['m4chk'].setChecked(params['m4chk'][0])
 
-        set_text('id1')
-        set_text('id2')
-        set_text('id3')
-        set_text('id4')
-        set_text('ch1')
-        set_text('ch2')
-        set_text('ch3')
-        set_text('ch4')
-        set_text('l1')
-        set_text('l2')
-        set_text('l3')
-        set_text('l4')
+            set_text('id1')
+            set_text('id2')
+            set_text('id3')
+            set_text('id4')
+            set_text('ch1')
+            set_text('ch2')
+            set_text('ch3')
+            set_text('ch4')
+            set_text('l1')
+            set_text('l2')
+            set_text('l3')
+            set_text('l4')
 
-        self.thresholds['threshDelta1'].setProperty("value", params['threshDelta1'][0])
-        self.thresholds['threshDelta2'].setProperty("value", params['threshDelta2'][0])
-        self.thresholds['threshDelta3'].setProperty("value", params['threshDelta3'][0])
-        self.thresholds['threshDelta4'].setProperty("value", params['threshDelta4'][0])
-        self.thresholds['threshUDelta1'].setProperty("value", params['threshUDelta1'][0])
-        self.thresholds['threshUDelta2'].setProperty("value", params['threshUDelta2'][0])
-        self.thresholds['threshUDelta3'].setProperty("value", params['threshUDelta3'][0])
-        self.thresholds['threshUDelta4'].setProperty("value", params['threshUDelta4'][0])
-        self.thresholds['threshLDelta1'].setProperty("value", params['threshLDelta1'][0])
-        self.thresholds['threshLDelta2'].setProperty("value", params['threshLDelta2'][0])
-        self.thresholds['threshLDelta3'].setProperty("value", params['threshLDelta3'][0])
-        self.thresholds['threshLDelta4'].setProperty("value", params['threshLDelta4'][0])
-        self.thresholds['threshThd1'].setProperty("value", params['threshThd1'][0])
-        self.thresholds['threshThd2'].setProperty("value", params['threshThd2'][0])
-        self.thresholds['threshThd3'].setProperty("value", params['threshThd3'][0])
-        self.thresholds['threshThd4'].setProperty("value", params['threshThd4'][0])
-        self.thresholds['threshThdl1'].setProperty("value", params['threshThdl1'][0])
-        self.thresholds['threshThdl2'].setProperty("value", params['threshThdl2'][0])
-        self.thresholds['threshThdl3'].setProperty("value", params['threshThdl3'][0])
-        self.thresholds['threshThdl4'].setProperty("value", params['threshThdl4'][0])
-        self.thresholds['threshMu1'].setProperty("value", params['threshMu1'][0])
-        self.thresholds['threshMu2'].setProperty("value", params['threshMu2'][0])
-        self.thresholds['threshMu3'].setProperty("value", params['threshMu3'][0])
-        self.thresholds['threshMu4'].setProperty("value", params['threshMu4'][0])
+            self.thresholds['threshDelta1'].setProperty("value", params['threshDelta1'][0])
+            self.thresholds['threshDelta2'].setProperty("value", params['threshDelta2'][0])
+            self.thresholds['threshDelta3'].setProperty("value", params['threshDelta3'][0])
+            self.thresholds['threshDelta4'].setProperty("value", params['threshDelta4'][0])
+            self.thresholds['threshUDelta1'].setProperty("value", params['threshUDelta1'][0])
+            self.thresholds['threshUDelta2'].setProperty("value", params['threshUDelta2'][0])
+            self.thresholds['threshUDelta3'].setProperty("value", params['threshUDelta3'][0])
+            self.thresholds['threshUDelta4'].setProperty("value", params['threshUDelta4'][0])
+            self.thresholds['threshLDelta1'].setProperty("value", params['threshLDelta1'][0])
+            self.thresholds['threshLDelta2'].setProperty("value", params['threshLDelta2'][0])
+            self.thresholds['threshLDelta3'].setProperty("value", params['threshLDelta3'][0])
+            self.thresholds['threshLDelta4'].setProperty("value", params['threshLDelta4'][0])
+            self.thresholds['threshThd1'].setProperty("value", params['threshThd1'][0])
+            self.thresholds['threshThd2'].setProperty("value", params['threshThd2'][0])
+            self.thresholds['threshThd3'].setProperty("value", params['threshThd3'][0])
+            self.thresholds['threshThd4'].setProperty("value", params['threshThd4'][0])
+            self.thresholds['threshThdl1'].setProperty("value", params['threshThdl1'][0])
+            self.thresholds['threshThdl2'].setProperty("value", params['threshThdl2'][0])
+            self.thresholds['threshThdl3'].setProperty("value", params['threshThdl3'][0])
+            self.thresholds['threshThdl4'].setProperty("value", params['threshThdl4'][0])
+            self.thresholds['threshMu1'].setProperty("value", params['threshMu1'][0])
+            self.thresholds['threshMu2'].setProperty("value", params['threshMu2'][0])
+            self.thresholds['threshMu3'].setProperty("value", params['threshMu3'][0])
+            self.thresholds['threshMu4'].setProperty("value", params['threshMu4'][0])
 
-        self.user_inputSetup()
+            self.user_inputSetup()
+
+        except KeyError:
+            self.error_dialog.setText("There was at least one missing paramter. Check your settings text file.")
+            self.error_dialog.show()
 
     def save_setup(self, name):
-        print(name)
         if name:
             if 'txt' in os.path.basename(name):
                 os.remove(name)
@@ -1430,6 +1528,10 @@ class main(QtWidgets.QMainWindow):
             self.plotObjs[m_num].append(self.ui.graphicsView.addPlot(title = 'Raw EEG trace', row = 4, col = m_idx+1))
             self.plotObjs[m_num].append(self.ui.graphicsView.addPlot(title = 'EEG Spectrogram', row = 5, col = m_idx+1))
 
+            raw_plot = self.plotObjs[m_num][-2]
+            raw_plot.setXRange(0,5000)
+            raw_plot.setYRange(-3000,3000)
+
             spec_plot = self.plotObjs[m_num][-1]
             spec_plot.clear()
             spec_plot.addItem(self.mice_onPlot[m_num].image_fft)
@@ -1456,7 +1558,8 @@ class main(QtWidgets.QMainWindow):
         self.updater_thread = QThread(self)
         self.data_getter = worker_buffer(self.datdir, self.mice_onPlot, switch = 1)
         self.data_getter.moveToThread(self.updater_thread)
-        self.data_getter.signal_new5sec.connect(self.update_master)
+        self.data_getter.signal_new5sec.connect(self.update_plots)
+        self.data_getter.signal_EEGraw.connect(self.update_EEGraw)
         self.updater_thread.started.connect(self.data_getter.run_it)
         self.updater_thread.start()
         self.plotter_on = True
@@ -1471,133 +1574,36 @@ class main(QtWidgets.QMainWindow):
             self.updater_thread.quit()
             self.updater_thread.wait()
 
+    @pyqtSlot(list, str)
+    def update_EEGraw(self, buf, m_idx):
+        self.mice_onPlot[m_idx].rawtrace += buf
+        self.mice_onPlot[m_idx].rawtrace = self.mice_onPlot[m_idx].rawtrace[-5000:]
+        self.plotObjs[m_idx][3].clear()
+        self.plotObjs[m_idx][3].plot(self.mice_onPlot[m_idx].rawtrace)
 
-    @pyqtSlot()
-    def update_master(self):
-        for mouse in self.mice_onPlot:
-            self.mice_onPlot[mouse].EEG_5 = np.append(self.mice_onPlot[mouse].EEG_5, self.mice_onPlot[mouse].EEG_2_5)
-            self.mice_onPlot[mouse].EMG_5 = np.append(self.mice_onPlot[mouse].EMG_5, self.mice_onPlot[mouse].EMG_2_5)
-            
-            self.update_spec(self.mice_onPlot[mouse], mouse)
+    def update_plots(self, mouseObj, m_idx): #mousename, data_eeg, data_emg):
 
-            if len(self.mice_onPlot[mouse].EEG_5) >= 5000:
-                self.mice_onPlot[mouse].EEG_5 = self.mice_onPlot[mouse].EEG_2_5
-                self.mice_onPlot[mouse].EMG_5 = self.mice_onPlot[mouse].EMG_2_5
+        for plots in self.plotObjs[m_idx][0:3] + [self.plotObjs[m_idx][4]]:
+            plots.clear()
 
-    def update_spec(self, mouseObj, m_idx): #mousename, data_eeg, data_emg):
+        self.plotObjs[m_idx][0].plot(mouseObj.delta_h)
+        self.plotObjs[m_idx][0].plot(mouseObj.thr_deltap, pen = pg.mkPen('r'))
 
-        if len(mouseObj.EEG_5) >= 5000:
-            p_e, p_m, f_e, f_m = recursive_spectrogram(mouseObj.EEG_5, mouseObj.EMG_5)
+        self.plotObjs[m_idx][1].plot(mouseObj.th_delta_h)
+        self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta1p, pen = pg.mkPen('r'))
+        self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta2p, pen = pg.mkPen('b'))
+        self.plotObjs[m_idx][1].plot(mouseObj.rem_h, pen = pg.mkPen('g'))
 
-            for plots in self.plotObjs[m_idx]:
-                plots.clear()
+        self.plotObjs[m_idx][2].plot(mouseObj.mu_h)
+        self.plotObjs[m_idx][2].plot(mouseObj.thr_mup, pen = pg.mkPen('r'))
 
-            SE = self.alpha*p_e + (1-self.alpha) * mouseObj.spectro_bufE[-1,:]
-            SM = self.alpha*p_m + (1-self.alpha) * mouseObj.spectro_bufM[-1,:]
+        x = pg.makeARGB(mouseObj.spectro_bufE, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
+        y = pg.makeARGB(mouseObj.spectro_bufM, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
 
-            # power calculation
-
-            i_delta = np.where((f_e >= self.r_delta[0]) & (f_e <= self.r_delta[1]))[0]
-            i_theta = np.where((f_e >= self.r_theta[0]) & (f_e <= self.r_theta[1]))[0]
-            i_mu = np.where((f_m >= self.r_mu[0]) & (f_m <= self.r_mu[1]))[0]
-            
-            pow_delta = np.sum(SE[i_delta])
-            mouseObj.delta_h.append(pow_delta)
-            mouseObj.delta_h = mouseObj.delta_h[-240:]
-            self.plotObjs[m_idx][0].plot(mouseObj.delta_h)
-            self.plotObjs[m_idx][0].plot(mouseObj.thr_deltap, pen = pg.mkPen('r'))
-
-            pow_theta = np.sum(SE[i_theta])
-            mouseObj.theta_h.append(pow_theta)
-            mouseObj.theta_h = mouseObj.theta_h[-240:]
-
-            th_delta = np.divide(pow_theta, pow_delta)
-            mouseObj.th_delta_h.append(th_delta)
-            mouseObj.th_delta_h = mouseObj.th_delta_h[-240:]
-            self.plotObjs[m_idx][1].plot(mouseObj.th_delta_h)
-            self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta1p, pen = pg.mkPen('r'))
-            self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta2p, pen = pg.mkPen('b'))
-
-            pow_mu = np.sum(SM[i_mu])
-            mouseObj.pow_muh.append(pow_mu)
-            mouseObj.mu_h.append(pow_mu)
-            mouseObj.mu_h = mouseObj.mu_h[-240:]
-            self.plotObjs[m_idx][2].plot(mouseObj.mu_h)
-            self.plotObjs[m_idx][2].plot(mouseObj.thr_mup, pen = pg.mkPen('r'))
+        self.plotObjs[m_idx][4].addItem(mouseObj.image_fft)
+        mouseObj.image_fft.setImage(x)
 
 
-            # determine rem state
-
-            if (mouseObj.prem == 0 and pow_delta < mouseObj.thr_delta and pow_mu < mouseObj.thr_mu):
-            ### could be REM
-            
-                if (th_delta > mouseObj.thr_th_delta1):
-                ### we are potentially entering REM
-                    if (mouseObj.past_len < mouseObj.num_iter):
-                        past_len = mouseObj.past_len
-                    else:
-                        past_len = mouseObj.num_iter
-
-                    # count the percentage of brainstate bins with elevated EMG power
-                    if past_len != 0:
-                        c_mu = np.sum(np.where(mouseObj.pow_muh[(past_len*-1):]>mouseObj.thr_mu)[0] ) / past_len
-
-                        if c_mu < 0.2: # 0.2 = past_mu previously
-                        ### we are in REM
-                            mouseObj.prem = 1  # turn laser on
-
-            # We are currently in REM; do we stay there?
-            if mouseObj.prem == 1:
-                ### REM continues, if theta/delta is larger than soft threshold and if there's
-                ### no EMG activation
-                if ((th_delta > mouseObj.thr_th_delta2) and (pow_mu < mouseObj.thr_mu)):
-                    mouseObj.prem = 1
-                else:
-                    mouseObj.prem = 0 #turn laser off
-                    mouseObj.bern_counter += 1
-
-            #  This section needs to be implemented as a part of cl protocol
-            # try:
-            #     if mouseObj.prem == 1:
-            #         try:
-            #             if self.ui.cl_enable.checkState() == 2:
-            #                 if self.bern_rem[self.bern_counter] == 1:
-            #                     self.s.send(mousename + '2')
-            #                     self.prem += 1 # bump up prem to 2 if actually on vs. 1 when it is randomly off
-            #                 else:
-            #                     self.s.send(mousename + '1')
-            #         except KeyError:
-            #             print('laser on at 100%' + ' rate')
-            #             if self.ui.cl_enable.checkState() == 2:
-            #                 self.s.send(mousename + '2')
-            #     else:
-            #         if self.ui.cl_enable.checkState() == 2:
-            #             self.s.send(mousename + '0')
-            # except socket.error:
-            #     print('error')
-
-
-            # self.rem_hist.append(self.prem)
-            mouseObj.rem_h.append(mouseObj.prem)
-            mouseObj.rem_h = mouseObj.rem_h[-240:]
-            self.plotObjs[m_idx][1].plot(mouseObj.rem_h, pen = pg.mkPen('g'))
-
-            # if self.prem == 2:
-            #     self.prem = 1
-
-            # Buffer add
-
-            mouseObj.num_iter += 1
-
-
-            mouseObj.spectro_bufE = np.vstack([mouseObj.spectro_bufE, [SE]])[1:,:]
-            mouseObj.spectro_bufM = np.vstack([mouseObj.spectro_bufM, [SM]])[1:,:]
-
-            x = pg.makeARGB(mouseObj.spectro_bufE, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
-            y = pg.makeARGB(mouseObj.spectro_bufM, levels = [0, mouseObj.thr_delta], lut = self.lut)[0]
-
-            self.plotObjs[m_idx][4].addItem(mouseObj.image_fft)
-            mouseObj.image_fft.setImage(x)
 
 
 
@@ -1640,6 +1646,12 @@ class main(QtWidgets.QMainWindow):
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
             self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
+
+            for filename in os.listdir('.'):
+                if self.todate_full in filename:
+                    shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
+                if "cam" in filename:
+                    shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
 
 
 
