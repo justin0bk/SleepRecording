@@ -148,10 +148,10 @@ class mouse_plotObj:
         self.position = position
         self.prem = 0
         self.pow_muh = []
-        # self.rem_hist = []
         self.past_len = int(120/2.5)
         self.num_iter = 0
         self.bern = np.random.binomial(1, 0.50 ,1000)
+        self.bern_counter = 0
 
         self.buffer_e = np.ndarray(0)
         self.buffer_m = np.ndarray(0)
@@ -166,26 +166,26 @@ class mouse_plotObj:
         step = 4*(position-1)
         if bool(params):
             self.thr_delta = params['THR_DELTA'][0]
-            self.thr_deltap = np.ones(240)*self.thr_delta
+            self.thr_deltap = list(np.ones(240)*self.thr_delta)
             self.thr_th_delta1 = params['THR_TH_DELTA'][0]
-            self.thr_th_delta1p = np.ones(240)*self.thr_th_delta1
+            self.thr_th_delta1p = list(np.ones(240)*self.thr_th_delta1)
             self.thr_th_delta2 = params['THR_TH_DELTA'][1]
-            self.thr_th_delta2p = np.ones(240)*self.thr_th_delta2
+            self.thr_th_delta2p = list(np.ones(240)*self.thr_th_delta2)
             self.thr_mu = params['THR_MU'][0]
-            self.thr_mup = np.ones(240)*self.thr_mu
+            self.thr_mup = list(np.ones(240)*self.thr_mu)
             self.channels = params['ch_alloc'][0]
             self.eeg_idx = self.channels.find('E') + step
             self.emg_idx = self.channels.find('M') + step
         else:
             # Set default values
             self.thr_delta = 70000
-            self.thr_deltap = np.ones(240)*self.thr_delta
+            self.thr_deltap = list(np.ones(240)*self.thr_delta)
             self.thr_th_delta1 = 2.5
-            self.thr_th_delta1p = np.ones(240)*self.thr_th_delta1
+            self.thr_th_delta1p = list(np.ones(240)*self.thr_th_delta1)
             self.thr_th_delta2 = 1.5
-            self.thr_th_delta2p = np.ones(240)*self.thr_th_delta2
+            self.thr_th_delta2p = list(np.ones(240)*self.thr_th_delta2)
             self.thr_mu = 50000
-            self.thr_mup = np.ones(240)*self.thr_mu
+            self.thr_mup = list(np.ones(240)*self.thr_mu)
             self.channels = 'meEM'
             self.eeg_idx = self.channels.find('E') + step
             self.emg_idx = self.channels.find('M') + step
@@ -383,13 +383,15 @@ class worker_camera(QObject):
 class worker_buffer(QObject):
 
     signal_new5sec = pyqtSignal(object, str)
+    signal_clMode = pyqtSignal(bool, int, int)
     signal_EEGraw = pyqtSignal(list, str)
 
-    def __init__(self, od, mouseObjs, switch = 0):
+    def __init__(self, od, mouseObjs, uiThresh, switch = 0):
         super(worker_buffer, self).__init__()
-        self.odir = od
-        self.fid = open(self.odir + '/amplifier.dat', 'rb')
-        self.tid = open(self.odir + '/time.dat', 'r')
+        self.od = od
+        self.uiThresh = uiThresh
+        self.fid = open(self.od + '/amplifier.dat', 'rb')
+        self.tid = open(self.od + '/time.dat', 'r')
         self.switch = switch
         self.new_data = np.fromfile(self.fid, dtype='int16')
         self.new_time = np.fromfile(self.tid, dtype='int32')
@@ -401,6 +403,12 @@ class worker_buffer(QObject):
         self.r_mu = [300, 500]
         for mouse in mouseObjs:
             self.numchans += len(mouseObjs[mouse].channels)
+            if self.uiThresh['threshDelta' + str(mouseObjs[mouse].position)].value() == 0:
+                self.uiThresh['threshDelta' + str(mouseObjs[mouse].position)].setProperty("value", mouseObjs[mouse].thr_delta) 
+                self.uiThresh['threshThd' + str(mouseObjs[mouse].position)].setProperty("value", mouseObjs[mouse].thr_th_delta1)
+                self.uiThresh['threshThdl' + str(mouseObjs[mouse].position)].setProperty("value", mouseObjs[mouse].thr_th_delta2) 
+                self.uiThresh['threshMu' + str(mouseObjs[mouse].position)].setProperty("value", mouseObjs[mouse].thr_mu)
+
 
     def update_spec(self, mouseObj, m_idx):
         if len(mouseObj.EEG_5) >= 5000:
@@ -435,11 +443,24 @@ class worker_buffer(QObject):
 
 
             # determine rem state
+            th_d = self.uiThresh['threshDelta' + str(mouseObj.position)].value()
+            th_th = self.uiThresh['threshThd' + str(mouseObj.position)].value()
+            th_thl = self.uiThresh['threshThdl' + str(mouseObj.position)].value()
+            th_m = self.uiThresh['threshMu' + str(mouseObj.position)].value()
 
-            if (mouseObj.prem == 0 and pow_delta < mouseObj.thr_delta and pow_mu < mouseObj.thr_mu):
+            mouseObj.thr_deltap.append(th_d)
+            mouseObj.thr_deltap = mouseObj.thr_deltap[-240:]
+            mouseObj.thr_th_delta1p.append(th_th)
+            mouseObj.thr_th_delta1p = mouseObj.thr_th_delta1p[-240:]
+            mouseObj.thr_th_delta2p.append(th_thl)
+            mouseObj.thr_th_delta2p = mouseObj.thr_th_delta2p[-240:]
+            mouseObj.thr_mup.append(th_m)
+            mouseObj.thr_mup = mouseObj.thr_mup[-240:]
+
+            if (mouseObj.prem == 0 and pow_delta < th_d and pow_mu < th_m):
             ### could be REM
             
-                if (th_delta > mouseObj.thr_th_delta1):
+                if (th_delta > th_th):
                 ### we are potentially entering REM
                     if (mouseObj.past_len < mouseObj.num_iter):
                         past_len = mouseObj.past_len
@@ -448,21 +469,24 @@ class worker_buffer(QObject):
 
                     # count the percentage of brainstate bins with elevated EMG power
                     if past_len != 0:
-                        c_mu = np.sum(np.where(mouseObj.pow_muh[(past_len*-1):]>mouseObj.thr_mu)[0] ) / past_len
+                        c_mu = np.sum(np.where(mouseObj.pow_muh[(past_len*-1):]>th_m)[0] ) / past_len
 
                         if c_mu < 0.2: # 0.2 = past_mu previously
                         ### we are in REM
                             mouseObj.prem = 1  # turn laser on
+                            self.signal_clMode.emit(True, mouseObj.position, mouseObj.bern[mouseObj.bern_counter])
+                            mouseObj.bern_counter += 1
 
             # We are currently in REM; do we stay there?
             if mouseObj.prem == 1:
                 ### REM continues, if theta/delta is larger than soft threshold and if there's
                 ### no EMG activation
-                if ((th_delta > mouseObj.thr_th_delta2) and (pow_mu < mouseObj.thr_mu)):
+                if ((th_delta > th_thl) and (pow_mu < th_m)):
                     mouseObj.prem = 1
                 else:
                     mouseObj.prem = 0 #turn laser off
-                    mouseObj.bern_counter += 1
+                    self.signal_clMode.emit(False, mouseObj.position, 0)
+                    
 
             # self.rem_hist.append(self.prem)
             mouseObj.rem_h.append(mouseObj.prem)
@@ -481,7 +505,6 @@ class worker_buffer(QObject):
 
             self.signal_new5sec.emit(mouseObj, m_idx)
 
-
     def rt_spectrogram(self, mouseObj, m_idx):
         mouseObj.EEG_5 = np.append(mouseObj.EEG_5, mouseObj.EEG_2_5)
         mouseObj.EMG_5 = np.append(mouseObj.EMG_5, mouseObj.EMG_2_5)
@@ -495,6 +518,7 @@ class worker_buffer(QObject):
 
 
         # we need: eeg_idx, emg_idx, new5_e, new5_m, 
+
     def run_it(self):
 
         while self.switch == 1:
@@ -535,6 +559,7 @@ class main(QtWidgets.QMainWindow):
         self.setWindowIcon(QtGui.QIcon('sleepm.png'))
         self.define_variables()
         self.load_setup('default_settings.txt')
+        self.assert_cl('option_default')
         self.connect_signals()
 
         #### Start from default setup ####
@@ -569,7 +594,11 @@ class main(QtWidgets.QMainWindow):
         self.preview_on = False
         self.trigger_on = False
         self.plotter_on = False
-        self.places = [False, False, False, False]
+        self.cl_on = False
+        self.remdep_on = False
+        self.nremdep_on = False
+        self.places = []
+        self.ip_hist = ''
 
         #### Range variables for plotting
         self.pos = np.array([0., 0.05, .2, .4, .6, .9])
@@ -723,9 +752,26 @@ class main(QtWidgets.QMainWindow):
         # self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
         self.commentItems['entercomment'].clicked.connect(self.submit_comment)
 
+    def current_protocol(self):
+        for protocol in self.protocols:
+            if self.protocols[protocol].isChecked():
+                return protocol
+
     def disable_customPulse(self, disable):
         for item in self.pulseControls:
             self.pulseControls[item].setDisabled(disable)
+
+    def assert_cl(self, option = 'option_default'):
+        if not self.rpi_on:
+            if option == 'option_cl':
+                self.protocols['option_default'].setChecked(True)
+            else:
+                self.protocols[option].setChecked(True)
+            self.protocols['option_cl'].setDisabled(True)
+
+        else:
+            self.protocols['option_cl'].setDisabled(False)
+            self.protocols[option].setChecked(True)
 
     @pyqtSlot()
     def user_inputSetup(self):
@@ -749,6 +795,7 @@ class main(QtWidgets.QMainWindow):
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(True)
             self.disable_customPulse(True)
+
         elif self.protocols['option_cl'].isChecked():
             self.parameters['pulsedur'].setDisabled(False)
             self.parameters['hi'].setDisabled(False)
@@ -758,6 +805,7 @@ class main(QtWidgets.QMainWindow):
             for item in self.thresholds:
                 self.thresholds[item].setDisabled(False)
             self.disable_customPulse(False)
+
         else:
             self.parameters['pulsedur'].setDisabled(True)
             self.parameters['hi'].setDisabled(True)
@@ -776,81 +824,82 @@ class main(QtWidgets.QMainWindow):
             else:
                 self.mouseIDs[text].setText('')
 
-        params = load_params(os.getcwd(), setting)
+        if setting:
+            params = load_params(os.getcwd(), setting)
 
-        try:
-            if params['buf_dir'] == []:
-                self.buf_dir = str(QFileDialog.getExistingDirectory(self, "Select the directory containing DAT files"))
-            else:
-                self.buf_dir = params['buf_dir'][0]
-            if params['remtxt_dir'] == []:
-                self.remtxt_dir = str(QFileDialog.getExistingDirectory(self, "Select path to mouse_rem.txt files"))
-            else:
-                self.remtxt_dir = params['remtxt_dir'][0]
-        except:
-            self.error_dialog.setText("Load unsuccesful: There is a problem setting up the directory.")
-            self.error_dialog.show()
+            try:
+                if params['buf_dir'] == []:
+                    self.buf_dir = str(QFileDialog.getExistingDirectory(self, "Select the directory containing DAT files"))
+                else:
+                    self.buf_dir = params['buf_dir'][0]
+                if params['remtxt_dir'] == []:
+                    self.remtxt_dir = str(QFileDialog.getExistingDirectory(self, "Select path to mouse_rem.txt files"))
+                else:
+                    self.remtxt_dir = params['remtxt_dir'][0]
+            except:
+                self.error_dialog.setText("Load unsuccesful: There is a problem setting up the directory.")
+                self.error_dialog.show()
 
-        try:
-            self.protocols[params['protocol'][0]].setChecked(True)
+            try:
+                self.assert_cl(params['protocol'][0])
 
-            self.parameters['sr'].setProperty("value", params['sr'][0])
-            self.parameters['delay'].setProperty("value", params['delay'][0])
-            self.parameters['expdur'].setProperty("value", params['expdur'][0])
-            self.parameters['pulsedur'].setProperty("value", params['pulsedur'][0])
-            self.parameters['hi'].setProperty("value", params['hi'][0])
-            self.parameters['lo'].setProperty("value", params['lo'][0])
-            self.parameters['maxPG'].setProperty("value", params['maxPG'][0])
-            self.parameters['minPG'].setProperty("value", params['minPG'][0])
+                self.parameters['sr'].setProperty("value", params['sr'][0])
+                self.parameters['delay'].setProperty("value", params['delay'][0])
+                self.parameters['expdur'].setProperty("value", params['expdur'][0])
+                self.parameters['pulsedur'].setProperty("value", params['pulsedur'][0])
+                self.parameters['hi'].setProperty("value", params['hi'][0])
+                self.parameters['lo'].setProperty("value", params['lo'][0])
+                self.parameters['maxPG'].setProperty("value", params['maxPG'][0])
+                self.parameters['minPG'].setProperty("value", params['minPG'][0])
 
-            self.mouseIDs['m1chk'].setChecked(params['m1chk'][0])
-            self.mouseIDs['m2chk'].setChecked(params['m2chk'][0])
-            self.mouseIDs['m3chk'].setChecked(params['m3chk'][0])
-            self.mouseIDs['m4chk'].setChecked(params['m4chk'][0])
+                self.mouseIDs['m1chk'].setChecked(params['m1chk'][0])
+                self.mouseIDs['m2chk'].setChecked(params['m2chk'][0])
+                self.mouseIDs['m3chk'].setChecked(params['m3chk'][0])
+                self.mouseIDs['m4chk'].setChecked(params['m4chk'][0])
 
-            set_text('id1')
-            set_text('id2')
-            set_text('id3')
-            set_text('id4')
-            set_text('ch1')
-            set_text('ch2')
-            set_text('ch3')
-            set_text('ch4')
-            set_text('l1')
-            set_text('l2')
-            set_text('l3')
-            set_text('l4')
+                set_text('id1')
+                set_text('id2')
+                set_text('id3')
+                set_text('id4')
+                set_text('ch1')
+                set_text('ch2')
+                set_text('ch3')
+                set_text('ch4')
+                set_text('l1')
+                set_text('l2')
+                set_text('l3')
+                set_text('l4')
 
-            self.thresholds['threshDelta1'].setProperty("value", params['threshDelta1'][0])
-            self.thresholds['threshDelta2'].setProperty("value", params['threshDelta2'][0])
-            self.thresholds['threshDelta3'].setProperty("value", params['threshDelta3'][0])
-            self.thresholds['threshDelta4'].setProperty("value", params['threshDelta4'][0])
-            self.thresholds['threshUDelta1'].setProperty("value", params['threshUDelta1'][0])
-            self.thresholds['threshUDelta2'].setProperty("value", params['threshUDelta2'][0])
-            self.thresholds['threshUDelta3'].setProperty("value", params['threshUDelta3'][0])
-            self.thresholds['threshUDelta4'].setProperty("value", params['threshUDelta4'][0])
-            self.thresholds['threshLDelta1'].setProperty("value", params['threshLDelta1'][0])
-            self.thresholds['threshLDelta2'].setProperty("value", params['threshLDelta2'][0])
-            self.thresholds['threshLDelta3'].setProperty("value", params['threshLDelta3'][0])
-            self.thresholds['threshLDelta4'].setProperty("value", params['threshLDelta4'][0])
-            self.thresholds['threshThd1'].setProperty("value", params['threshThd1'][0])
-            self.thresholds['threshThd2'].setProperty("value", params['threshThd2'][0])
-            self.thresholds['threshThd3'].setProperty("value", params['threshThd3'][0])
-            self.thresholds['threshThd4'].setProperty("value", params['threshThd4'][0])
-            self.thresholds['threshThdl1'].setProperty("value", params['threshThdl1'][0])
-            self.thresholds['threshThdl2'].setProperty("value", params['threshThdl2'][0])
-            self.thresholds['threshThdl3'].setProperty("value", params['threshThdl3'][0])
-            self.thresholds['threshThdl4'].setProperty("value", params['threshThdl4'][0])
-            self.thresholds['threshMu1'].setProperty("value", params['threshMu1'][0])
-            self.thresholds['threshMu2'].setProperty("value", params['threshMu2'][0])
-            self.thresholds['threshMu3'].setProperty("value", params['threshMu3'][0])
-            self.thresholds['threshMu4'].setProperty("value", params['threshMu4'][0])
+                self.thresholds['threshDelta1'].setProperty("value", params['threshDelta1'][0])
+                self.thresholds['threshDelta2'].setProperty("value", params['threshDelta2'][0])
+                self.thresholds['threshDelta3'].setProperty("value", params['threshDelta3'][0])
+                self.thresholds['threshDelta4'].setProperty("value", params['threshDelta4'][0])
+                self.thresholds['threshUDelta1'].setProperty("value", params['threshUDelta1'][0])
+                self.thresholds['threshUDelta2'].setProperty("value", params['threshUDelta2'][0])
+                self.thresholds['threshUDelta3'].setProperty("value", params['threshUDelta3'][0])
+                self.thresholds['threshUDelta4'].setProperty("value", params['threshUDelta4'][0])
+                self.thresholds['threshLDelta1'].setProperty("value", params['threshLDelta1'][0])
+                self.thresholds['threshLDelta2'].setProperty("value", params['threshLDelta2'][0])
+                self.thresholds['threshLDelta3'].setProperty("value", params['threshLDelta3'][0])
+                self.thresholds['threshLDelta4'].setProperty("value", params['threshLDelta4'][0])
+                self.thresholds['threshThd1'].setProperty("value", params['threshThd1'][0])
+                self.thresholds['threshThd2'].setProperty("value", params['threshThd2'][0])
+                self.thresholds['threshThd3'].setProperty("value", params['threshThd3'][0])
+                self.thresholds['threshThd4'].setProperty("value", params['threshThd4'][0])
+                self.thresholds['threshThdl1'].setProperty("value", params['threshThdl1'][0])
+                self.thresholds['threshThdl2'].setProperty("value", params['threshThdl2'][0])
+                self.thresholds['threshThdl3'].setProperty("value", params['threshThdl3'][0])
+                self.thresholds['threshThdl4'].setProperty("value", params['threshThdl4'][0])
+                self.thresholds['threshMu1'].setProperty("value", params['threshMu1'][0])
+                self.thresholds['threshMu2'].setProperty("value", params['threshMu2'][0])
+                self.thresholds['threshMu3'].setProperty("value", params['threshMu3'][0])
+                self.thresholds['threshMu4'].setProperty("value", params['threshMu4'][0])
 
-            self.user_inputSetup()
+                self.user_inputSetup()
 
-        except KeyError:
-            self.error_dialog.setText("There was at least one missing paramter. Check your settings text file.")
-            self.error_dialog.show()
+            except KeyError:
+                self.error_dialog.setText("There was at least one missing paramter. Check your settings text file.")
+                self.error_dialog.show()
 
     def save_setup(self, name):
         if name:
@@ -943,31 +992,50 @@ class main(QtWidgets.QMainWindow):
             self.error_dialog.setText("There is no arduino available")
             self.error_dialog.show()
 
-    def arduino_disconnect(self):
-        if self.ard_on:
-            self.comPort.close()
-            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_off"))
-            self.ard_on = False
 
-    # def raspi_mode_on(self, ip):
+    def raspi_mode_on(self, ip):
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.port = 5010
+        try:
+            self.s.connect((ip, self.port))
+            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_on"))
+            self.rpi_on = True            
+        except socket.error:
+            self.s.close()
+            self.error_dialog.setText("There is a problem connecting to the RPi. Try again.")
+            self.error_dialog.show()
 
-    # def raspi_disconnect(self):
+
 
     @pyqtSlot()
     def comm_connect(self):
         if not self.ard_on and not self.rpi_on:
-            ip_address, okPressed = QInputDialog.getText(self, "Connecting to RPi","Type the IP address of your RPi (ie. 10.103.215.103) or skip to disregard", QLineEdit.Normal, "")
+            ip_address, okPressed = QInputDialog.getText(self, "Connecting to RPi","Type the IP address of your RPi (ie. 10.103.215.103) or skip to disregard", QLineEdit.Normal, self.ip_hist)
             if okPressed:
+                self.ip_hist = ip_address
                 if ip_address == '':
                     self.arduino_mode_on()
                 else:
                     self.raspi_mode_on(ip_address)
-                    
+                    self.assert_cl(self.current_protocol())
+
         else:
-            if self.ard_on:
-                self.arduino_disconnect()
-            elif self.rpi_on:
-                self.raspi_disconnect()
+            self.comm_disconnect()
+            self.assert_cl(self.current_protocol())
+             
+    def comm_disconnect(self):   
+
+        if self.ard_on:
+            self.comPort.close()
+            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_off"))
+            self.ard_on = False    
+        
+        elif self.rpi_on:
+            self.s.send('END_PROG')
+            self.s.shutdown(socket.SHUT_RDWR)
+            self.s.close()
+            self.devices['led_controller'].setPixmap(QtGui.QPixmap("led_off"))
+            self.rpi_on = False
 
 
 
@@ -1176,24 +1244,16 @@ class main(QtWidgets.QMainWindow):
         places = []
         if self.mouseIDs['m1chk'].checkState() == 2:
             mouselist.append(self.mouseIDs['id1'].text())
-            places.append(True)
-        else:
-            places.append(False)
+            places.append(0)
         if self.mouseIDs['m2chk'].checkState() == 2:
             mouselist.append(self.mouseIDs['id2'].text())
-            places.append(True)
-        else:
-            places.append(False)
+            places.append(1)
         if self.mouseIDs['m3chk'].checkState() == 2:
             mouselist.append(self.mouseIDs['id3'].text())
-            places.append(True)
-        else:
-            places.append(False)
+            places.append(2)
         if self.mouseIDs['m4chk'].checkState() == 2:
             mouselist.append(self.mouseIDs['id4'].text())
-            places.append(True)
-        else:
-            places.append(False)
+            places.append(3)
         return mouselist, not bool(mouselist), places
 
     def disable_input(self, disable):
@@ -1282,6 +1342,8 @@ class main(QtWidgets.QMainWindow):
             self.txt.write('stim_freq:\t' + str(int(1.0/(self.parameters['hi'].value()+self.parameters['lo'].value())/0.001)) + '\r\n')
             if self.protocols['option_ol'].isChecked():
                 self.txt.write('laser_dur:\t' + str(self.parameters['pulsedur'].value()) + '\r\n')
+                self.txt.write('max_gap:\t' + str(self.parameters['maxPG'].value()) + '\r\n')
+                self.txt.write('min_gap:\t' + str(self.parameters['minPG'].value()) + '\r\n')
         self.txt.write('exp_dur:\t' + str(self.parameters['expdur'].value()) + '\r\n')
         self.txt.write('mouse_ID:\t')
         if self.mouseIDs['m1chk'].checkState() == 2:
@@ -1365,7 +1427,10 @@ class main(QtWidgets.QMainWindow):
 
         if self.trigger_on:
             self.trigger_on = False
-            self.comPort.write(bytearray(b'E\n'))
+            if self.ard_on:
+                self.comPort.write(bytearray(b'E\n'))
+            elif self.rpi_on:
+                self.s.send('STAT0000')
 
     @pyqtSlot(float, str)
     def update_countdown(self, time_rem = 0, time_display = '0'):
@@ -1396,8 +1461,21 @@ class main(QtWidgets.QMainWindow):
         if self.ard_on:
             self.comPort.write(bytearray(b'R\n'))
         elif self.rpi_on:
-            # add lines here #
-            pass
+            self.s.send('STAT0101')
+
+    @pyqtSlot(bool, int, int)
+    def cl_pulse(self, on, position, bern = 0):
+        if self.cl_on:
+            if on:
+                print(bern)
+                if bern == 1:
+                    self.s.send('STAT0' + str(position+1) + '11')
+                else:
+                    self.s.send('STAT0' + str(position+1) + '01')
+            else:
+                self.s.send('STAT0' + str(position+1) + '00')
+
+
 
     @pyqtSlot(float, str)
     def update_pcountdown(self, ptime_rem = 0, ptime_display = '0'):
@@ -1415,7 +1493,7 @@ class main(QtWidgets.QMainWindow):
 
 
     def setupProtocol(self):
-        if self.ard_on and self.protocols['option_ol'].isChecked:
+        if self.ard_on:
             try:
                 self.comPort.write(bytearray(b'H' + str(self.parameters['hi'].value()) + '\n'))
                 self.comPort.write(bytearray(b'L' + str(self.parameters['lo'].value()) + '\n'))
@@ -1426,7 +1504,10 @@ class main(QtWidgets.QMainWindow):
                 self.error_dialog.setText("Pulse information tranfer failed")
                 self.error_dialog.show()
 
-        # elif self.rpi_on:
+        elif self.rpi_on:
+            self.s.send("HI%06d" % self.parameters['hi'].value())
+            self.s.send("LO%06d" % self.parameters['lo'].value())
+            self.s.send("PD%06d" % self.parameters['pulsedur'].value())
 
         self.countdown_obj, self.countdown_thread = self.begin_countdown()
         self.countdown_obj.countdown_on = True
@@ -1435,25 +1516,24 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def beginProtocol(self):
-        
         self.run_default()
-
         if self.protocols['option_ol'].isChecked():
             self.pcountdown_obj, self.pcountdown_thread = self.begin_pcountdown()
         elif self.protocols['option_cl'].isChecked():
-            self.run_cl()
+            self.cl_on = True
         elif self.protocols['option_remdep'].isChecked():
-            self.run_cl()
+            self.remdep_on = True
         elif self.protocols['option_nremdep'].isChecked():
-            self.run_cl()
+            self.nremdep_on = True
 
     def run_default(self):
+
+        self.trigger_on = True
         if self.ard_on:
             self.comPort.write(bytearray(b'S\n'))
-            self.trigger_on = True
+            
         elif self.rpi_on:
-            # add lines here for rpi #
-            pass
+            self.s.send('STAT0001')
         
         
     # def run_cl(self):
@@ -1487,17 +1567,15 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def endProtocol(self):
-
         self.end_countdown()
-
         if self.protocols['option_ol'].isChecked():
             self.end_pcountdown()
         elif self.protocols['option_cl'].isChecked():
-            self.end_cl()
+            self.cl_on = False
         elif self.protocols['option_remdep'].isChecked():
-            self.end_dep()
+            self.remdep_on = False
         elif self.protocols['option_nremdep'].isChecked():
-            self.end_dep()
+            self.nremdep_on = False
 
 
     # def end_cl():
@@ -1509,7 +1587,7 @@ class main(QtWidgets.QMainWindow):
         self.plotObjs = {}
         for m_idx in range(len(self.mouselist)):
             ID = self.mouselist[m_idx]
-            pos = m_idx + 1
+            pos = self.places[m_idx]+1
             m_num = 'm' + str(pos)
             try:
                 params = load_params(self.remtxt_dir, ID + '_rem.txt')
@@ -1556,10 +1634,11 @@ class main(QtWidgets.QMainWindow):
             return
 
         self.updater_thread = QThread(self)
-        self.data_getter = worker_buffer(self.datdir, self.mice_onPlot, switch = 1)
+        self.data_getter = worker_buffer(self.datdir, self.mice_onPlot, self.thresholds, switch = 1)
         self.data_getter.moveToThread(self.updater_thread)
         self.data_getter.signal_new5sec.connect(self.update_plots)
         self.data_getter.signal_EEGraw.connect(self.update_EEGraw)
+        self.data_getter.signal_clMode.connect(self.cl_pulse)
         self.updater_thread.started.connect(self.data_getter.run_it)
         self.updater_thread.start()
         self.plotter_on = True
@@ -1684,7 +1763,7 @@ class main(QtWidgets.QMainWindow):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
         self.stop_clicked()
         self.cams_disconnect()
-        self.arduino_disconnect()
+        self.comm_disconnect()
         
 
 
