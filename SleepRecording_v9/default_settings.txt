@@ -1,0 +1,52 @@
+buf_dir:	
+remtxt_dir:	
+protocol:	option_default
+sr:	1000
+delay:	0
+expdur:	5.00
+pulsedur:	120
+hi:	5
+lo:	95
+maxPG:	15
+minPG:	25
+m1chk:	0
+m2chk:	0
+m3chk:	0
+m4chk:	0
+id1:	
+id2:	
+id3:	
+id4:	
+ch1:	
+ch2:	
+ch3:	
+ch4:	
+l1:	
+l2:	
+l3:	
+l4:	
+threshDelta1:	0
+threshDelta2:	0
+threshDelta3:	0
+threshDelta4:	0
+threshUDelta1:	0
+threshUDelta2:	0
+threshUDelta3:	0
+threshUDelta4:	0
+threshLDelta1:	0
+threshLDelta2:	0
+threshLDelta3:	0
+threshLDelta4:	0
+threshThd1:	0
+threshThd2:	0
+threshThd3:	0
+threshThd4:	0
+threshThdl1:	0
+threshThdl2:	0
+threshThdl3:	0
+threshThdl4:	0
+threshMu1:	0
+threshMu2:	0
+threshMu3:	0
+threshMu4:	0
+
