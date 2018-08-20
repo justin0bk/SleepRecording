@@ -1517,6 +1517,7 @@ class main(QtWidgets.QMainWindow):
     @pyqtSlot()
     def beginProtocol(self):
         self.run_default()
+        self.beginPlots()
         if self.protocols['option_ol'].isChecked():
             self.pcountdown_obj, self.pcountdown_thread = self.begin_pcountdown()
         elif self.protocols['option_cl'].isChecked():
@@ -1620,7 +1621,6 @@ class main(QtWidgets.QMainWindow):
             for plot in self.plotObjs[m_num]:
                 plot.setMouseEnabled(x = False)
 
-        QTimer.singleShot(2000, lambda: self.beginPlots())  
 
     def beginPlots(self):
 
@@ -1719,8 +1719,8 @@ class main(QtWidgets.QMainWindow):
             self.disable_input(False)
             self.disable_comment(True)
             self.endNotes()
-            self.endProtocol()
             self.end_videoRec()
+            self.endProtocol()
             self.endPlots()
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
