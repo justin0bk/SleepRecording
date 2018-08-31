@@ -344,22 +344,24 @@ class worker_camera(QObject):
         self.camera_on = False
         self.writer = 0
         self.prev_timestamp = 0
+
+    def strobe_on(self):
+        self.cam.writeRegister(0x1508, 0x82000000) #Turns strobe on
+
+    def strobe_off(self):
+        self.cam.writeRegister(0x1508, 0x80000000) #Turns strobe off
         
 
     @pyqtSlot()
     def run_camera(self):
-        """
-        Commented areas for start_clicked
-        """
-
         if self.preview_or_record == 'R':
-            # self.f = open("cam1_timestamps.txt","w+")
-            self.cam.writeRegister(0x1508, 0x82000000) #Turns strobe on
+            self.strobe_on()
 
         elif self.preview_or_record == 'P':
-            self.cam.writeRegister(0x1508, 0x80000000) #Turns strobe off
+            self.strobe_off()
 
         while self.camera_on:
+
             try:
                 image = self.cam.retrieveBuffer()
             except PyCapture2.Fc2error as fc2Err:
@@ -590,6 +592,7 @@ class main(QtWidgets.QMainWindow):
         self.ard_on = False
         self.cam1_connected = False
         self.cam2_connected = False
+        self.delay_on = False
         self.start_on = False
         self.preview_on = False
         self.trigger_on = False
@@ -679,6 +682,10 @@ class main(QtWidgets.QMainWindow):
         self.pulseControls['continuous'] = self.ui.continuous
         self.pulseControls['c_on'] = self.ui.c_on
         self.pulseControls['c_off'] = self.ui.c_off
+        self.pulseControls['box1_1'] = self.ui.box1_1
+        self.pulseControls['box1_2'] = self.ui.box1_2
+        self.pulseControls['box2_1'] = self.ui.box2_1
+        self.pulseControls['box2_2'] = self.ui.box2_2
 
         ## Comments ##
         ## QTextEdit
@@ -1208,14 +1215,14 @@ class main(QtWidgets.QMainWindow):
                 self.mkv_writer1 = cv2.VideoWriter(self.ui.id1.text() + "_cam_1.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
             if self.mouseIDs['m2chk'].checkState() == 2:
                 self.mkv_writer2 = cv2.VideoWriter(self.ui.id2.text() + "_cam_2.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
-            self.cam_obj1, self.cam_thread1 = self.start_cameraThread(self.cam1, 'R', 1)
+            self.cam_obj1, self.cam_thread1 = self.start_cameraThread(self.cam1, 'P', 1)
 
         if self.cam2_connected:
             if self.mouseIDs['m3chk'].checkState() == 2:
                 self.mkv_writer3 = cv2.VideoWriter(self.ui.id3.text() + "_cam_3.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
             if self.mouseIDs['m4chk'].checkState() == 2:
                 self.mkv_writer4 = cv2.VideoWriter(self.ui.id4.text() + "_cam_4.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
-            self.cam_obj2, self.cam_thread2 = self.start_cameraThread(self.cam2, 'R', 2)
+            self.cam_obj2, self.cam_thread2 = self.start_cameraThread(self.cam2, 'P', 2)
 
     def end_videoRec(self):
         if self.cam1_connected:
@@ -1509,6 +1516,9 @@ class main(QtWidgets.QMainWindow):
             self.s.send("LO%06d" % self.parameters['lo'].value())
             self.s.send("PD%06d" % self.parameters['pulsedur'].value())
 
+        if self.parameters['delay'].value() != 0:
+            self.delay_on = True
+
         self.countdown_obj, self.countdown_thread = self.begin_countdown()
         self.countdown_obj.countdown_on = True
         self.countdown_obj.start_time = time.time()
@@ -1516,8 +1526,16 @@ class main(QtWidgets.QMainWindow):
 
     @pyqtSlot()
     def beginProtocol(self):
+        self.delay_on = False
         self.run_default()
-        self.beginPlots()
+        if self.cam1_connected:
+            self.cam_obj1.strobe_on()
+
+        if self.cam2_connected:
+            self.cam_obj2.strobe_on()
+        QTimer.singleShot(1000, lambda: self.beginPlots())
+
+
         if self.protocols['option_ol'].isChecked():
             self.pcountdown_obj, self.pcountdown_thread = self.begin_pcountdown()
         elif self.protocols['option_cl'].isChecked():
@@ -1720,17 +1738,28 @@ class main(QtWidgets.QMainWindow):
             self.disable_comment(True)
             self.endNotes()
             self.end_videoRec()
-            self.endProtocol()
-            self.endPlots()
+
             self.commentItems['commentHist'].clear()
             self.commentItems['commentHist'].appendPlainText("Comment history:")
             self.ui.startbutton.setStyleSheet(self.ui.stopbutton.styleSheet())
 
-            for filename in os.listdir('.'):
-                if self.todate_full in filename:
-                    shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
-                if "cam" in filename:
-                    shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
+            if self.delay_on:
+                self.end_countdown()
+                for filename in os.listdir('.'):
+                    if self.todate_full in filename:
+                        os.remove(filename)
+                        
+
+            else:
+                self.endProtocol()
+                self.endPlots()
+
+                for filename in os.listdir('.'):
+                    if self.todate_full in filename:
+                        shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
+                    if "cam" in filename:
+                        shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
+
 
 
 
