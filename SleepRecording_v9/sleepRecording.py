@@ -148,7 +148,7 @@ class mouse_plotObj:
         self.pow_muh = []
         self.past_len = int(120/2.5)
         self.num_iter = 0
-        self.bern = np.random.binomial(1, 0.50 ,1000)
+        self.bern = np.random.binomial(1, 0.5 ,1000)
         self.bern_counter = 0
 
         self.buffer_e = np.ndarray(0)
@@ -486,22 +486,14 @@ class worker_buffer(QObject):
                 else:
                     mouseObj.prem = 0 #turn laser off
                     self.signal_clMode.emit(False, mouseObj.position, 0)
-                    
-
-            # self.rem_hist.append(self.prem)
-            mouseObj.rem_h.append(mouseObj.prem)
-            mouseObj.rem_h = mouseObj.rem_h[-240:]
             
-
-            # if self.prem == 2:
-            #     self.prem = 1
-
+            
             # Buffer add
-
             mouseObj.num_iter += 1
 
             mouseObj.spectro_bufE = np.vstack([mouseObj.spectro_bufE, [SE]])[1:,:]
             mouseObj.spectro_bufM = np.vstack([mouseObj.spectro_bufM, [SM]])[1:,:]
+
 
             self.signal_new5sec.emit(mouseObj, m_idx)
 
@@ -757,8 +749,12 @@ class main(QtWidgets.QMainWindow):
         self.controls['stopbutton'].clicked.connect(self.stop_clicked)
         self.ui.actionLoad_Settings.triggered.connect(lambda: self.load_setup(QFileDialog.getOpenFileName(self, "Select your setting (txt)")[0]))
         self.ui.actionSave_Settings.triggered.connect(lambda: self.save_setup(QFileDialog.getSaveFileName(self, "Save your settings")[0]))
-        self.pulseControls['c_on'].clicked.connect(self.pulon_clicked)
-        self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
+        self.ui.box1_1.clicked.connect(lambda: self.pulse_clicked(1))
+        self.ui.box1_2.clicked.connect(lambda: self.pulse_clicked(2))
+        self.ui.box2_1.clicked.connect(lambda: self.pulse_clicked(3))
+        self.ui.box2_2.clicked.connect(lambda: self.pulse_clicked(4))
+        self.pulseControls['c_on'].clicked.connect(lambda: self.pulse_clicked(0))
+        self.pulseControls['c_off'].clicked.connect(lambda: self.pulse_clicked(0))
         self.commentItems['entercomment'].clicked.connect(self.submit_comment)
 
     def current_protocol(self):
@@ -1473,6 +1469,7 @@ class main(QtWidgets.QMainWindow):
             self.s.send('STAT0101')
 
     def cl_check(self, pos):
+        # returns the opposite state (ON gives False, OFF gives True)
         if pos == 1:
             return not self.cl1_on
         elif pos == 2:
@@ -1485,12 +1482,16 @@ class main(QtWidgets.QMainWindow):
     def cl_lock(self, pos, onoff):
         if pos == 1:
             self.cl1_on = onoff
+            self.ui.box1_1.setChecked(True)
         elif pos == 2:
             self.cl2_on = onoff
+            self.ui.box1_2.setChecked(True)
         elif pos == 3:
             self.cl3_on = onoff
+            self.ui.box2_1.setChecked(True)
         elif pos == 4:
             self.cl4_on = onoff
+            self.ui.box2_2.setChecked(True)
 
     @pyqtSlot(bool, int, int)
     def cl_pulse(self, on, position, bern = 0):
@@ -1581,35 +1582,6 @@ class main(QtWidgets.QMainWindow):
         elif self.rpi_on:
             self.s.send('STAT0001')
         
-        
-    # def run_cl(self):
-
-        # rem state on/off
-        # if self.ardorrasp == 'r':
-        #     self.s.send('START')
-
-        #     for mouse in self.mouselist:
-        #         self.s.send(mouse)
-        #         time.sleep(0.1)
-
-                
-        #     self.s.send('CountDone')
-
-        #     if self.ui.cl_enable.checkState() == 2:
-        #         time.sleep(0.1)
-        #         self.s.send('cl')
-        #     elif self.ui.pul_enable.checkState() == 2:
-        #         time.sleep(0.1)
-        #         self.s.send('ol')
-        #         time.sleep(0.1)
-        #         self.s.send(str(self.ui.hi.value()))
-        #         time.sleep(0.1)
-        #         self.s.send(str(self.ui.lo.value()))
-        #         time.sleep(0.1)
-        #         self.s.send(str(self.ui.pulsedur.value()))
-        #     else:
-        #         time.sleep(0.1)
-        #         self.s.send('nn')
 
     @pyqtSlot()
     def endProtocol(self):
@@ -1622,9 +1594,6 @@ class main(QtWidgets.QMainWindow):
             self.remdep_on = False
         elif self.protocols['option_nremdep'].isChecked():
             self.nremdep_on = False
-
-
-    # def end_cl():
 
 
     def setupPlots(self):
@@ -1666,7 +1635,6 @@ class main(QtWidgets.QMainWindow):
             for plot in self.plotObjs[m_num]:
                 plot.setMouseEnabled(x = False)
 
-
     def beginPlots(self):
 
         try:
@@ -1705,6 +1673,32 @@ class main(QtWidgets.QMainWindow):
         self.plotObjs[m_idx][3].clear()
         self.plotObjs[m_idx][3].plot(self.mice_onPlot[m_idx].rawtrace)
 
+    def check_onState(self, m_idx):
+        # This function is specifically for updating plots
+        if m_idx == 'm1':
+            if self.cl1_on:
+                return True
+            else:
+                return False
+
+        elif m_idx == 'm2':
+            if self.cl2_on:
+                return True
+            else:
+                return False
+
+        elif m_idx == 'm3':
+            if self.cl3_on:
+                return True
+            else:
+                return False
+
+        elif m_idx == 'm4':
+            if self.cl4_on:
+                return True
+            else:
+                return False
+
     def update_plots(self, mouseObj, m_idx): #mousename, data_eeg, data_emg):
 
         for plots in self.plotObjs[m_idx][0:3] + [self.plotObjs[m_idx][4]]:
@@ -1716,6 +1710,14 @@ class main(QtWidgets.QMainWindow):
         self.plotObjs[m_idx][1].plot(mouseObj.th_delta_h)
         self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta1p, pen = pg.mkPen('r'))
         self.plotObjs[m_idx][1].plot(mouseObj.thr_th_delta2p, pen = pg.mkPen('b'))
+
+        if self.check_onState(m_idx):
+            mouseObj.rem_h.append(2)
+        else:
+            mouseObj.rem_h.append(0)
+        
+        mouseObj.rem_h = mouseObj.rem_h[-240:]
+
         self.plotObjs[m_idx][1].plot(mouseObj.rem_h, pen = pg.mkPen('g'))
 
         self.plotObjs[m_idx][2].plot(mouseObj.mu_h)
@@ -1790,39 +1792,55 @@ class main(QtWidgets.QMainWindow):
                         shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
 
 
+    @pyqtSlot(int)
+    def pulse_clicked(self, lid):
+        if self.rpi_on:            
+            if lid == 0:
+                # Need to implement general laser
+                pass
 
+            elif lid == 1:
+                if self.cl1_on:
+                    self.s.send('STAT0200')
+                    self.cl1_on = False
+                    self.ui.box1_1.setChecked(False)
+                else:
+                    self.s.send('STAT0211')
+                    self.cl1_on = True
+                    self.ui.box1_1.setChecked(True)
+            elif lid == 2:
+                if self.cl2_on:
+                    self.s.send('STAT0300')
+                    self.cl2_on = False
+                    self.ui.box1_2.setChecked(False)
+                else:
+                    self.s.send('STAT0311')
+                    self.cl2_on = True
+                    self.ui.box1_2.setChecked(True)
+            elif lid == 3:
+                if self.cl3_on:
+                    self.s.send('STAT0400')
+                    self.cl3_on = False
+                    self.ui.box2_1.setChecked(False)
+                else:
+                    self.s.send('STAT0411')
+                    self.cl3_on = True
+                    self.ui.box2_1.setChecked(True)
+            elif lid == 4:
+                if self.cl4_on:
+                    self.s.send('STAT0500')
+                    self.cl4_on = False
+                    self.ui.box2_2.setChecked(False)
+                else:
+                    self.s.send('STAT0511')
+                    self.cl4_on = True
+                    self.ui.box2_2.setChecked(True)
+        else:
+            self.ui.box1_1.setChecked(False)
+            self.ui.box2_1.setChecked(False)
+            self.ui.box1_2.setChecked(False)
+            self.ui.box2_2.setChecked(False)
 
-    @pyqtSlot()
-    def pulon_clicked(self):
-        if self.rpi_on:
-            if self.pulseControls['box1_1'].checkState() == 2 and not self.cl1_on:
-                self.s.send('STAT0211')
-                self.cl1_on = True
-            if self.pulseControls['box1_2'].checkState() == 2 and not self.cl2_on:
-                self.s.send('STAT0311')
-                self.cl2_on = True
-            if self.pulseControls['box2_1'].checkState() == 2 and not self.cl3_on:
-                self.s.send('STAT0411')
-                self.cl3_on = True
-            if self.pulseControls['box2_2'].checkState() == 2 and not self.cl4_on:
-                self.s.send('STAT0511')
-                self.cl4_on = True
-
-    @pyqtSlot()
-    def puloff_clicked(self):
-        if self.rpi_on:
-            if self.pulseControls['box1_1'].checkState() == 2:
-                self.s.send('STAT0200')
-                self.cl1_on = False
-            if self.pulseControls['box1_2'].checkState() == 2:
-                self.s.send('STAT0300')
-                self.cl2_on = False
-            if self.pulseControls['box2_1'].checkState() == 2:
-                self.s.send('STAT0400')
-                self.cl3_on = False
-            if self.pulseControls['box2_2'].checkState() == 2:
-                self.s.send('STAT0500')
-                self.cl4_on = False
 
     def disable_comment(self, disable):
         self.commentItems['entercomment'].setDisabled(disable)
@@ -1841,6 +1859,23 @@ class main(QtWidgets.QMainWindow):
         new_txt = self.commentItems['commentbox'].toPlainText()
         self.commentItems['commentHist'].appendPlainText("\r\n" + time.asctime()[11:19] + " " + new_txt)
         self.commentItems['commentbox'].clear()
+
+    def keyPressEvent(self, event):
+        # self.s.send("HI%06d" % self.ui.hi_c.value())
+        # self.s.send("LO%06d" % self.ui.lo_c.value())
+        # 1 on keyboard
+        if event.key() == 49:
+            self.pulse_clicked(1)
+        # 2 on keyboard
+        elif event.key() == 50:
+            self.pulse_clicked(2)
+        # 3 on keyboard
+        elif event.key() == 51:
+            self.pulse_clicked(3)
+        # 4 on keyboard
+        elif event.key() == 52:
+            self.pulse_clicked(4)
+
 
     def closeEvent(self, *args, **kwargs):
         super(QtGui.QMainWindow, self).closeEvent(*args, **kwargs)
