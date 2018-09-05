@@ -82,7 +82,6 @@ def smooth_data(x, sig):
     return scipy.signal.fftconvolve(x, F, 'same')
 
 def recursive_spectrogram(EEG, EMG, sf=0.3, alpha=0.3):
-
     len_eeg = len(EEG)
     fdt = 2.5
     SR = 1000.0
@@ -142,7 +141,6 @@ def load_params(path, param_file):
         return {}
 
 class mouse_plotObj:
-
     def __init__(self, ID, position, params = {}):
         self.name = ID
         self.position = position
@@ -598,6 +596,10 @@ class main(QtWidgets.QMainWindow):
         self.trigger_on = False
         self.plotter_on = False
         self.cl_on = False
+        self.cl1_on = False
+        self.cl2_on = False
+        self.cl3_on = False
+        self.cl4_on = False
         self.remdep_on = False
         self.nremdep_on = False
         self.places = []
@@ -753,10 +755,10 @@ class main(QtWidgets.QMainWindow):
         self.controls['preview'].clicked.connect(self.preview_clicked)
         self.controls['startbutton'].clicked.connect(self.start_clicked)
         self.controls['stopbutton'].clicked.connect(self.stop_clicked)
-        self.ui.actionLoad_Settings.triggered.connect(lambda: self.load_setup(os.path.basename(QFileDialog.getOpenFileName(self, "Select your setting (txt)")[0])))
+        self.ui.actionLoad_Settings.triggered.connect(lambda: self.load_setup(QFileDialog.getOpenFileName(self, "Select your setting (txt)")[0]))
         self.ui.actionSave_Settings.triggered.connect(lambda: self.save_setup(QFileDialog.getSaveFileName(self, "Save your settings")[0]))
-        # self.pulseControls['c_on'].clicked.connect(self.pulon_clicked)
-        # self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
+        self.pulseControls['c_on'].clicked.connect(self.pulon_clicked)
+        self.pulseControls['c_off'].clicked.connect(self.puloff_clicked)
         self.commentItems['entercomment'].clicked.connect(self.submit_comment)
 
     def current_protocol(self):
@@ -832,7 +834,7 @@ class main(QtWidgets.QMainWindow):
                 self.mouseIDs[text].setText('')
 
         if setting:
-            params = load_params(os.getcwd(), setting)
+            params = load_params(os.path.dirname(setting), os.path.basename(setting))
 
             try:
                 if params['buf_dir'] == []:
@@ -1470,17 +1472,40 @@ class main(QtWidgets.QMainWindow):
         elif self.rpi_on:
             self.s.send('STAT0101')
 
+    def cl_check(self, pos):
+        if pos == 1:
+            return not self.cl1_on
+        elif pos == 2:
+            return not self.cl2_on
+        elif pos == 3:
+            return not self.cl3_on
+        elif pos == 4:
+            return not self.cl4_on
+
+    def cl_lock(self, pos, onoff):
+        if pos == 1:
+            self.cl1_on = onoff
+        elif pos == 2:
+            self.cl2_on = onoff
+        elif pos == 3:
+            self.cl3_on = onoff
+        elif pos == 4:
+            self.cl4_on = onoff
+
     @pyqtSlot(bool, int, int)
     def cl_pulse(self, on, position, bern = 0):
         if self.cl_on:
-            if on:
+            if on and self.cl_check(position):
                 print(bern)
                 if bern == 1:
                     self.s.send('STAT0' + str(position+1) + '11')
+                    self.cl_lock(position, True)
                 else:
                     self.s.send('STAT0' + str(position+1) + '01')
+                    self.cl_lock(position, True)
             else:
                 self.s.send('STAT0' + str(position+1) + '00')
+                self.cl_lock(position, False)
 
 
 
@@ -1530,9 +1555,11 @@ class main(QtWidgets.QMainWindow):
         self.run_default()
         if self.cam1_connected:
             self.cam_obj1.strobe_on()
-
+            self.cam_obj1.preview_or_record = 'R'
         if self.cam2_connected:
             self.cam_obj2.strobe_on()
+            self.cam_obj2.preview_or_record = 'R'
+
         QTimer.singleShot(1000, lambda: self.beginPlots())
 
 
@@ -1748,6 +1775,8 @@ class main(QtWidgets.QMainWindow):
                 for filename in os.listdir('.'):
                     if self.todate_full in filename:
                         os.remove(filename)
+                    if "cam" in filename:
+                        os.remove(filename)
                         
 
             else:
@@ -1763,14 +1792,39 @@ class main(QtWidgets.QMainWindow):
 
 
 
-    # @pyqtSlot()
-    # def pulon_clicked(self):
+    @pyqtSlot()
+    def pulon_clicked(self):
+        if self.rpi_on:
+            if self.pulseControls['box1_1'].checkState() == 2 and not self.cl1_on:
+                self.s.send('STAT0211')
+                self.cl1_on = True
+            if self.pulseControls['box1_2'].checkState() == 2 and not self.cl2_on:
+                self.s.send('STAT0311')
+                self.cl2_on = True
+            if self.pulseControls['box2_1'].checkState() == 2 and not self.cl3_on:
+                self.s.send('STAT0411')
+                self.cl3_on = True
+            if self.pulseControls['box2_2'].checkState() == 2 and not self.cl4_on:
+                self.s.send('STAT0511')
+                self.cl4_on = True
 
-    # @pyqtSlot()
-    # def puloff_clicked(self):
+    @pyqtSlot()
+    def puloff_clicked(self):
+        if self.rpi_on:
+            if self.pulseControls['box1_1'].checkState() == 2:
+                self.s.send('STAT0200')
+                self.cl1_on = False
+            if self.pulseControls['box1_2'].checkState() == 2:
+                self.s.send('STAT0300')
+                self.cl2_on = False
+            if self.pulseControls['box2_1'].checkState() == 2:
+                self.s.send('STAT0400')
+                self.cl3_on = False
+            if self.pulseControls['box2_2'].checkState() == 2:
+                self.s.send('STAT0500')
+                self.cl4_on = False
 
     def disable_comment(self, disable):
-
         self.commentItems['entercomment'].setDisabled(disable)
 
     @pyqtSlot()
