@@ -27,9 +27,11 @@ from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox
 import pyqtgraph as pg
 from run_GUI_v9 import Ui_MainWindow
 import socket
+import h5py
 import numpy as np
 import scipy
 import scipy.signal
+import scipy.io as so
 import PyCapture2
 import cv2
 import serial
@@ -140,6 +142,37 @@ def load_params(path, param_file):
     except:
         return {}
 
+
+
+def binomial_hist(p, len, hist=2):
+    if p==1:
+        return np.ones((len,))
+
+    bin = np.zeros((len,))
+    hist0 = 0
+    hist1 = 0
+    for i in range(len):
+        b = np.random.binomial(1,p,1)
+
+        if hist1<hist and hist0<hist:
+            bin[i] = b
+            if b==1:
+                hist1+=1
+            else:
+                hist0+=1
+        elif hist1 == hist:
+            bin[i] = 0
+            hist1 = 0
+            hist0 = 1
+        elif hist0 == hist:
+            bin[i] = 1
+            hist1 = 1
+            hist0 = 0
+        else:
+            pass
+    return bin
+
+
 class mouse_plotObj:
     def __init__(self, ID, position, params = {}):
         self.name = ID
@@ -148,7 +181,8 @@ class mouse_plotObj:
         self.pow_muh = []
         self.past_len = int(120/2.5)
         self.num_iter = 0
-        self.bern = np.random.binomial(1, 0.5 ,1000)
+        #self.bern = np.random.binomial(1, 0.5 ,1000)
+        self.bern = binomial_hist(0.5 ,1000)
         self.bern_counter = 0
 
         self.buffer_e = np.ndarray(0)
@@ -378,7 +412,7 @@ class worker_camera(QObject):
 
             self.signal_camFrame.emit(self.preview_or_record, imgnp, self.str_timestamp, self.cam_num)
             
-            time.sleep(0.06)
+            time.sleep(0.05)
 
 class worker_buffer(QObject):
 
@@ -1150,11 +1184,13 @@ class main(QtWidgets.QMainWindow):
 
         if PoR == 'R':
             if cam_num == 1:
+                self.timestamp1.write(str(timestamps))
                 if self.mouseIDs['m1chk'].checkState() == 2:
                     self.mkv_writer1.write(np.uint8(frame[0:322,:]))
                 if self.mouseIDs['m2chk'].checkState() == 2:
                     self.mkv_writer2.write(np.uint8(frame[322:,:]))
             if cam_num == 2:
+                self.timestamp2.write(str(timestamps))
                 if self.mouseIDs['m3chk'].checkState() == 2:
                     self.mkv_writer3.write(np.uint8(frame[0:322,:]))
                 if self.mouseIDs['m4chk'].checkState() == 2:
@@ -1214,6 +1250,7 @@ class main(QtWidgets.QMainWindow):
             if self.mouseIDs['m2chk'].checkState() == 2:
                 self.mkv_writer2 = cv2.VideoWriter(self.ui.id2.text() + "_cam_2.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
             self.cam_obj1, self.cam_thread1 = self.start_cameraThread(self.cam1, 'P', 1)
+            self.timestamp1 = open('timestamp1.txt', 'w+')
 
         if self.cam2_connected:
             if self.mouseIDs['m3chk'].checkState() == 2:
@@ -1221,6 +1258,7 @@ class main(QtWidgets.QMainWindow):
             if self.mouseIDs['m4chk'].checkState() == 2:
                 self.mkv_writer4 = cv2.VideoWriter(self.ui.id4.text() + "_cam_4.mkv", self.fourcc, self.frame_rate, (482, 322), isColor=0)
             self.cam_obj2, self.cam_thread2 = self.start_cameraThread(self.cam2, 'P', 2)
+            self.timestamp2 = open('timestamp2.txt', 'w+')
 
     def end_videoRec(self):
         if self.cam1_connected:
@@ -1230,6 +1268,7 @@ class main(QtWidgets.QMainWindow):
             if self.mouseIDs['m2chk'].checkState() == 2:
                 self.mkv_writer2.release()
             QTimer.singleShot(100, lambda: self.cam1view.clear())
+
 
         if self.cam2_connected:
             self.stop_cameraThread(self.cam2, self.cam_obj2, self.cam_thread2)
@@ -1330,6 +1369,7 @@ class main(QtWidgets.QMainWindow):
         self.txt.write('amplifier:\t' + 'intan' + '\r\n')
         self.txt.write('SR:\t' + str(self.parameters['sr'].value()) + '\r\n')
         self.txt.write('delay:\t' + str(self.parameters['delay'].value()) + '\r\n')
+        self.txt.write('conversion:\t' + '0.195' + '\r\n')
         if self.protocols['option_ol'].isChecked():
             self.txt.write('mode:\t' + 'ol\r\n')
         elif self.protocols['option_cl'].isChecked():
@@ -1779,17 +1819,42 @@ class main(QtWidgets.QMainWindow):
                         os.remove(filename)
                     if "cam" in filename:
                         os.remove(filename)
+                    if 'timestamp' in filename:
+                        os.remove(filename)
                         
 
             else:
                 self.endProtocol()
                 self.endPlots()
+                QTimer.singleShot(500, lambda: self.save_timestamps())
 
                 for filename in os.listdir('.'):
                     if self.todate_full in filename:
                         shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
                     if "cam" in filename:
                         shutil.move(os.getcwd() + "\\" + filename, self.datdir + "\\" + filename)
+                        
+
+    def save_timestamps(self):
+        if self.cam1_connected:
+            self.timestamp1.close()
+            timelist1 = np.loadtxt('timestamp1.txt')
+            timelist1 = timelist1 - timelist1[0]
+            so.savemat('timestamp1.mat', {'timelist': timelist1})
+            os.remove('timestamp1.txt')
+            shutil.move(os.getcwd() + "\\" + 'timestamp1.mat', self.datdir + "\\" + 'timestamp1.mat')
+        if self.cam2_connected:
+            self.timestamp2.close()
+            timelist2 = np.loadtxt('timestamp2.txt')
+            timelist2 = timelist2 - timelist2[0]
+            so.savemat('timestamp2.mat', {'timelist': timelist2})
+            os.remove('timestamp2.txt')
+            shutil.move(os.getcwd() + "\\" + 'timestamp2.mat', self.datdir + "\\" + 'timestamp2.mat')
+        
+
+
+        
+
 
 
     @pyqtSlot(int)
@@ -1843,7 +1908,9 @@ class main(QtWidgets.QMainWindow):
 
 
     def disable_comment(self, disable):
+
         self.commentItems['entercomment'].setDisabled(disable)
+        
 
     @pyqtSlot()
     def submit_comment(self):
